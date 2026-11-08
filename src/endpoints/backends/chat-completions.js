@@ -69,6 +69,7 @@ import {
 import { getVertexAIAuth, getProjectIdFromServiceAccount } from '../google.js';
 import { getCookieSecret } from '../../users.js';
 import { fetchGoogleModels, GoogleModelsHttpError } from './google-models.js';
+import { sendVertexRequest } from './vertex-native.js';
 
 const API_OPENAI = 'https://api.openai.com/v1';
 const API_CLAUDE = 'https://api.anthropic.com/v1';
@@ -2243,6 +2244,9 @@ router.post('/generate', async function (request, response) {
     try {
         if (!request.body) return response.status(400).send({ error: true });
 
+        // Native Vertex owns preparation for both HTTP and background/internal entry points.
+        if (request.body.chat_completion_source === CHAT_COMPLETION_SOURCES.VERTEXAI) return await sendVertexRequest(request, response);
+
         const postProcessingType = request.body.custom_prompt_post_processing;
         if (Array.isArray(request.body.messages) && postProcessingType) {
             console.info('Applying custom prompt post-processing of type', postProcessingType);
@@ -2260,7 +2264,6 @@ router.post('/generate', async function (request, response) {
             case CHAT_COMPLETION_SOURCES.CLAUDE: return await sendClaudeRequest(request, response);
             case CHAT_COMPLETION_SOURCES.AI21: return await sendAI21Request(request, response);
             case CHAT_COMPLETION_SOURCES.MAKERSUITE: return await sendMakerSuiteRequest(request, response);
-            case CHAT_COMPLETION_SOURCES.VERTEXAI: return await sendMakerSuiteRequest(request, response);
             case CHAT_COMPLETION_SOURCES.MISTRALAI: return await sendMistralAIRequest(request, response);
             case CHAT_COMPLETION_SOURCES.COHERE: return await sendCohereRequest(request, response);
             case CHAT_COMPLETION_SOURCES.DEEPSEEK: return await sendDeepSeekRequest(request, response);

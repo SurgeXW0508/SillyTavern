@@ -394,3 +394,9 @@ gemini:
 enableServerPlugins: false
 # Attempt to automatically update server plugins on startup
 enableServerPluginsAutoUpdate: true
+
+# Native Vertex reverse proxies require an operator-approved origin (no path/query).
+# Private destinations additionally require the existing private-address whitelist.
+# Outbound request proxies retain ownership of their DNS/address policy.
+vertexai:
+  allowedReverseProxyOrigins: []

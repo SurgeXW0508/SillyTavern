@@ -709,7 +709,7 @@ export class ToolManager {
         const isClaudeToolCall = c => Array.isArray(c) ? c.filter(x => x).every(isClaudeToolCall) : c?.input && c?.name && c?.id;
         const isGoogleToolCall = c => Array.isArray(c) ? c.filter(x => x).every(isGoogleToolCall) : c?.name && c?.args;
         const convertClaudeToolCall = c => ({ id: c.id, function: { name: c.name, arguments: c.input } });
-        const convertGoogleToolCall = (c, signature = null) => ({ id: getRandomId(), function: { name: c.name, arguments: c.args }, signature });
+        const convertGoogleToolCall = (c, signature = null) => ({ id: c.id || getRandomId(), function: { name: c.name, arguments: c.args }, signature });
 
         // Parsed tool calls from streaming data
         if (Array.isArray(data) && data.length > 0 && Array.isArray(data[0])) {
@@ -783,7 +783,7 @@ export class ToolManager {
      * @param {any} data Reply data
      * @returns {Promise<ToolInvocationResult>} Successful tool invocations
      */
-    static async invokeFunctionTools(data, { reasoningText = null } = {}) {
+    static async invokeFunctionTools(data, { reasoningText = null, vertexResponse = null } = {}) {
         /** @type {ToolInvocationResult} */
         const result = {
             invocations: [],
@@ -801,7 +801,7 @@ export class ToolManager {
                 continue;
             }
 
-            console.log('[ToolManager] Function tool call:', toolCall);
+            if (!vertexResponse) console.log('[ToolManager] Function tool call:', toolCall);
             const id = toolCall.id;
             const parameters = toolCall.function.arguments;
             const name = toolCall.function.name;
@@ -811,7 +811,7 @@ export class ToolManager {
             const toast = message && toastr.info(message, 'Tool Calling', { timeOut: 0 });
             const toolResult = await ToolManager.invokeFunctionTool(name, parameters);
             toastr.clear(toast);
-            console.log('[ToolManager] Function tool result:', result);
+            if (!vertexResponse) console.log('[ToolManager] Function tool result:', result);
 
             // Handle tool errors — still create an invocation so the LLM sees the failure
             if (toolResult instanceof Error) {
@@ -852,6 +852,7 @@ export class ToolManager {
             result.invocations.push(invocation);
         }
 
+        if (vertexResponse && result.invocations.length === toolCalls.length && result.invocations[0]) result.invocations[0].vertex_response = structuredClone(vertexResponse);
         return result;
     }
 
@@ -881,6 +882,7 @@ export class ToolManager {
         const codeElement = document.createElement('code');
         codeElement.classList.add('language-json');
         data.forEach(i => {
+            delete i.vertex_response;
             i.parameters = tryParse(i.parameters);
             i.result = tryParse(i.result);
         });

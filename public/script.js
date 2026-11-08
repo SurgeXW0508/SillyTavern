@@ -1,3 +1,4 @@
+import { applyVertexMessageState, vertexResponseRecord } from './scripts/vertex-state.js';
 import {
     showdown,
     moment,
@@ -3785,6 +3786,8 @@ class StreamingProcessor {
             appendMediaToMessage(message, $(this.messageDom));
         }
 
+        if (this.vertexResponse && this.type !== 'impersonate') applyVertexMessageState(message, this.vertexResponse, this.vertexMeta, this.type === 'continue' ? this.continueMessage : '');
+
         // Store reasoning signature for models that support multi-turn context
         if (this.reasoningSignature) {
             message.extra = message.extra || {};
@@ -3817,14 +3820,14 @@ class StreamingProcessor {
         playMessageSound();
     }
 
-    onErrorStreaming() {
+    onErrorStreaming({ emitEvents = true } = {}) {
         this.abortController.abort();
         this.isStopped = true;
 
         this.markUIGenStopped();
 
         const noEmitTypes = ['swipe', 'impersonate', 'continue'];
-        if (!noEmitTypes.includes(this.type)) {
+        if (emitEvents && !noEmitTypes.includes(this.type)) {
             eventSource.emit(event_types.MESSAGE_RECEIVED, this.messageId, this.type);
             eventSource.emit(event_types.CHARACTER_MESSAGE_RENDERED, this.messageId, this.type);
         }
@@ -3845,6 +3848,7 @@ class StreamingProcessor {
     }
 
     onStopStreaming() {
+        if (this.vertexResponse) this.vertexMeta = { ...this.vertexMeta, state: 'canceled', phase: 'canceled' };
         this.abortController.abort();
         this.isFinished = true;
     }
@@ -3892,6 +3896,8 @@ class StreamingProcessor {
                 this.reasoningHandler.updateReasoning(this.messageId, state?.reasoning);
                 this.images = state?.images ?? [];
                 this.reasoningSignature = state?.signature ?? null;
+                this.vertexResponse = state?.vertexResponse ?? null;
+                this.vertexMeta = state?.vertexMeta ?? null;
                 await eventSource.emit(event_types.STREAM_TOKEN_RECEIVED, text);
                 await sw.tick(async () => await this.onProgressStreaming(this.messageId, this.continueMessage + text));
             }
@@ -3901,7 +3907,12 @@ class StreamingProcessor {
             // in the case of a self-inflicted abort, we have already cleaned up
             if (!this.isFinished) {
                 console.error(err);
-                this.onErrorStreaming();
+                this.onErrorStreaming({ emitEvents: !this.vertexResponse });
+                if (this.vertexResponse && this.type !== 'impersonate' && chat[this.messageId]) {
+                    this.vertexMeta = { ...this.vertexMeta, state: this.vertexMeta?.state || 'partial', phase: this.vertexMeta?.state || 'partial' };
+                    await this.finalizeIntermediaryMessage(this.messageId, this.continueMessage + this.result, { unlockUI: true });
+                    await saveChatConditional();
+                }
             }
             return this.result;
         }
@@ -5407,7 +5418,7 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
 
             const isStreamFinished = streamingProcessor && !streamingProcessor.isStopped && streamingProcessor.isFinished;
             const isStreamWithToolCalls = streamingProcessor && Array.isArray(streamingProcessor.toolCalls) && streamingProcessor.toolCalls.length;
-            if (canPerformToolCalls && isStreamFinished && isStreamWithToolCalls) {
+            if (canPerformToolCalls && isStreamFinished && isStreamWithToolCalls && (!streamingProcessor.vertexMeta || streamingProcessor.vertexMeta.state === 'completed')) {
                 const lastMessage = chat[chat.length - 1];
                 const hasToolCalls = ToolManager.hasToolCalls(streamingProcessor.toolCalls);
                 const shouldDeleteMessage = type !== 'swipe' && ['', '...'].includes(lastMessage?.mes) && !lastMessage?.extra?.reasoning && ['', '...'].includes(streamingProcessor?.result);
@@ -5417,6 +5428,7 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
                 }
                 const invocationResult = await ToolManager.invokeFunctionTools(streamingProcessor.toolCalls, {
                     reasoningText: streamingProcessor.reasoningHandler.reasoning,
+                    vertexResponse: streamingProcessor.vertexResponse,
                 });
                 const shouldStopGeneration = (!invocationResult.invocations.length && shouldDeleteMessage) || invocationResult.stealthCalls.length;
                 if (hasToolCalls) {
@@ -5488,6 +5500,7 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
         let reasoning = extractReasoningFromData(data);
         let imageUrls = extractImagesFromData(data);
         const reasoningSignature = extractReasoningSignatureFromData(data);
+        const vertexResponse = data?.vertexMeta?.contract === 1 ? vertexResponseRecord(data.responseContent?.parts, data.vertexMeta.model || getGeneratingModel(), data.vertexEnvelope) : null;
         kobold_horde_model = title;
 
         const swipes = extractMultiSwipes(data, type);
@@ -5529,20 +5542,20 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
         } else {
             // Without streaming we'll be having a full message on continuation. Treat it as a last chunk.
             if (originalType !== 'continue') {
-                ({ type, getMessage } = await saveReply({ type, getMessage, title, swipes, reasoning, imageUrls, reasoningSignature }));
+                ({ type, getMessage } = await saveReply({ type, getMessage, title, swipes, reasoning, imageUrls, reasoningSignature, vertexResponse, vertexMeta: data?.vertexMeta }));
             } else {
-                ({ type, getMessage } = await saveReply({ type: 'appendFinal', getMessage, title, swipes, reasoning, imageUrls, reasoningSignature }));
+                ({ type, getMessage } = await saveReply({ type: 'appendFinal', getMessage, title, swipes, reasoning, imageUrls, reasoningSignature, vertexResponse, vertexMeta: data?.vertexMeta }));
             }
 
             // This relies on `saveReply` having been called to add the message to the chat, so it must be last.
             parseAndSaveLogprobs(data, continue_mag);
         }
 
-        if (canPerformToolCalls) {
+        if (canPerformToolCalls && (!data?.vertexMeta || data.vertexMeta.state === 'completed')) {
             const hasToolCalls = ToolManager.hasToolCalls(data);
             const shouldDeleteMessage = type !== 'swipe' && ['', '...'].includes(getMessage) && !reasoning;
             hasToolCalls && shouldDeleteMessage && await deleteLastMessage();
-            const invocationResult = await ToolManager.invokeFunctionTools(data, { reasoningText: reasoning });
+            const invocationResult = await ToolManager.invokeFunctionTools(data, { reasoningText: reasoning, vertexResponse });
             const shouldStopGeneration = (!invocationResult.invocations.length && shouldDeleteMessage) || invocationResult.stealthCalls.length;
             if (hasToolCalls) {
                 if (shouldStopGeneration) {
@@ -6639,7 +6652,7 @@ async function processImageAttachment(message, { imageUrls }) {
  * @property {string} type Type of generation
  * @property {string} getMessage Generated message
  */
-export async function saveReply({ type, getMessage, fromStreaming = false, title = '', swipes = [], reasoning = '', imageUrls = [], reasoningSignature = null }) {
+export async function saveReply({ type, getMessage, fromStreaming = false, title = '', swipes = [], reasoning = '', imageUrls = [], reasoningSignature = null, vertexResponse = null, vertexMeta = null }) {
     // Backward compatibility
     if (arguments.length > 1 && typeof arguments[0] !== 'object') {
         console.trace('saveReply called with positional arguments. Please use an object instead.');
@@ -6667,6 +6680,9 @@ export async function saveReply({ type, getMessage, fromStreaming = false, title
     }
 
     let oldMessage = '';
+    const recordVertex = message => {
+        if (vertexResponse) applyVertexMessageState(message, vertexResponse, vertexMeta, ['append', 'continue', 'appendFinal'].includes(type) ? oldMessage : '');
+    };
     const generationFinished = new Date();
     if (type === 'swipe') {
         oldMessage = lastMessage.mes;
@@ -6682,6 +6698,7 @@ export async function saveReply({ type, getMessage, fromStreaming = false, title
             lastMessage.extra.reasoning = reasoning;
             lastMessage.extra.reasoning_duration = null;
             lastMessage.extra.reasoning_signature = reasoningSignature;
+            recordVertex(lastMessage);
             await processImageAttachment(lastMessage, { imageUrls });
             if (power_user.message_token_count_enabled) {
                 const tokenCountText = (reasoning || '') + lastMessage.mes;
@@ -6707,6 +6724,7 @@ export async function saveReply({ type, getMessage, fromStreaming = false, title
         lastMessage.extra.reasoning = reasoning;
         lastMessage.extra.reasoning_duration = null;
         lastMessage.extra.reasoning_signature = reasoningSignature;
+        recordVertex(lastMessage);
         await processImageAttachment(lastMessage, { imageUrls });
         if (power_user.message_token_count_enabled) {
             const tokenCountText = (reasoning || '') + lastMessage.mes;
@@ -6728,6 +6746,7 @@ export async function saveReply({ type, getMessage, fromStreaming = false, title
         lastMessage.extra.model = getGeneratingModel();
         lastMessage.extra.reasoning += reasoning;
         lastMessage.extra.reasoning_signature = reasoningSignature;
+        recordVertex(lastMessage);
         await processImageAttachment(lastMessage, { imageUrls });
         // We don't know if the reasoning duration extended, so we don't update it here on purpose.
         if (power_user.message_token_count_enabled) {
@@ -6775,6 +6794,7 @@ export async function saveReply({ type, getMessage, fromStreaming = false, title
             newMessage.extra.gen_id = group_generation_id;
         }
 
+        recordVertex(newMessage);
         await processImageAttachment(newMessage, { imageUrls });
         const chat_id = (chat.length - 1);
 

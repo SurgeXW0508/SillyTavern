@@ -429,7 +429,7 @@ export function convertCohereMessages(messages, names) {
  * @param {PromptNames} names Prompt names
  * @returns {{contents: *[], system_instruction: {parts: {text: string}[]}}} Prompt for Google MakerSuite models
  */
-export function convertGooglePrompt(messages, model, useSysPrompt, names) {
+export function convertGooglePrompt(messages, model, useSysPrompt, names, { nativeVertex = false } = {}) {
     const sysPrompt = [];
 
     if (useSysPrompt) {
@@ -463,7 +463,7 @@ export function convertGooglePrompt(messages, model, useSysPrompt, names) {
             message.role = 'user';
         } else if (message.role === 'assistant') {
             // A trailing model turn is a prefill, which is rejected by the newest models
-            message.role = noPrefillModel && index === messages.length - 1 ? 'user' : 'model';
+            message.role = !nativeVertex && noPrefillModel && index === messages.length - 1 ? 'user' : 'model';
         }
 
         // Convert the content to an array of parts
@@ -511,7 +511,26 @@ export function convertGooglePrompt(messages, model, useSysPrompt, names) {
 
         //create the prompt parts
         const parts = [];
-        message.content.forEach((part) => {
+        const storedVertex = message.vertex_response;
+        const storedCalls = storedVertex?.parts?.filter(p => p.functionCall).map(p => p.functionCall);
+        const sameCalls = Array.isArray(message.tool_calls) && storedCalls?.length === message.tool_calls.length
+            && message.tool_calls.every((c, i) => (!storedCalls[i].id || c.id === storedCalls[i].id) && c.function.name === storedCalls[i].name
+                && JSON.stringify(tryParse(c.function.arguments) ?? c.function.arguments) === JSON.stringify(storedCalls[i].args));
+        const text = message.content.length === 1 && message.content[0].type === 'text' ? message.content[0].text : null;
+        const originalText = storedVertex?.promptText;
+        const at = typeof text === 'string' && typeof originalText === 'string' ? text.indexOf(originalText) : -1;
+        const sameText = at >= 0 && (originalText.length ? text.indexOf(originalText, at + originalText.length) === -1 : text === '');
+        let nativeParts = nativeVertex && message.role === 'model' && storedVertex?.model === model && Array.isArray(storedVertex.parts) && (sameText || sameCalls) ? storedVertex.parts : null;
+        if (nativeParts && sameText && !sameCalls) {
+            // Name prefixes and prompt-processing suffixes remain separate unsigned Parts.
+            nativeParts = [...(at ? [{ text: text.slice(0, at) }] : []), ...nativeParts,
+                ...(text.length > at + originalText.length ? [{ text: text.slice(at + originalText.length) }] : [])];
+        }
+        if (nativeParts) {
+            parts.push(...structuredClone(nativeParts));
+            for (const call of message.tool_calls || []) toolNameMap[call.id] = call.function.name;
+        }
+        (nativeParts ? [] : message.content).forEach((part) => {
             const addDataUrlPart = (/** @type {string} */ url, /** @type {string} */ defaultMimeType, /** @type {string?} */ detail = null) => {
                 if (url && url.startsWith('data:')) {
                     const [header, base64Data] = url.split(',');
@@ -526,7 +545,7 @@ export function convertGooglePrompt(messages, model, useSysPrompt, names) {
                     };
 
                     // https://ai.google.dev/gemini-api/docs/gemini-3#media_resolution
-                    if (/gemini-3/.test(model) && mediaResolution) {
+                    if (/gemini-[34]/.test(model) && mediaResolution) {
                         part.mediaResolution = {
                             level: mediaResolution,
                         };
@@ -542,6 +561,7 @@ export function convertGooglePrompt(messages, model, useSysPrompt, names) {
                 const name = toolNameMap[part.tool_call_id] ?? 'unknown';
                 parts.push({
                     functionResponse: {
+                        ...(/^gemini-4/.test(model) ? { id: part.tool_call_id } : {}),
                         name: name,
                         response: { name: name, content: part.content },
                     },
@@ -550,6 +570,7 @@ export function convertGooglePrompt(messages, model, useSysPrompt, names) {
                 part.tool_calls.forEach((toolCall) => {
                     parts.push({
                         functionCall: {
+                            ...(/^gemini-4/.test(model) ? { id: toolCall.id } : {}),
                             name: toolCall.function.name,
                             args: tryParse(toolCall.function.arguments) ?? toolCall.function.arguments,
                         },
@@ -574,14 +595,15 @@ export function convertGooglePrompt(messages, model, useSysPrompt, names) {
 
         // https://ai.google.dev/gemini-api/docs/gemini-3#migrating_from_other_models
         // Inject stored thought signatures, or fall back to bypass magic for Gemini 3
-        if (/gemini-3/.test(model) || /gemini-2\.5/.test(model)) {
+        if (/gemini-[34]/.test(model) || /gemini-2\.5/.test(model)) {
             const skipSignatureMagic = 'skip_thought_signature_validator';
             const textSignature = message.signature;
 
             parts.forEach((part) => {
+                if (nativeParts) return;
                 if (enableThoughtSignatures && textSignature && typeof part.text === 'string') {
                     part.thoughtSignature = textSignature;
-                } else if (/gemini-3/.test(model)) {
+                } else if (/gemini-[34]/.test(model)) {
                     // Gemini 3: Fall back to bypass magic for function calls (mandatory) and images
                     if (part.functionCall && !part.thoughtSignature) {
                         part.thoughtSignature = skipSignatureMagic;
@@ -599,8 +621,9 @@ export function convertGooglePrompt(messages, model, useSysPrompt, names) {
         // merge consecutive messages with the same role
         if (index > 0 && message.role === contents[contents.length - 1].role) {
             parts.forEach((part) => {
-                if (part.text) {
-                    const textPart = contents[contents.length - 1].parts.find(p => typeof p.text === 'string');
+                if (part.thoughtSignature) { contents[contents.length - 1].parts.push(part); return; }
+                if (part.text && !part.thoughtSignature) {
+                    const textPart = contents[contents.length - 1].parts.find(p => typeof p.text === 'string' && !p.thoughtSignature);
                     if (textPart) {
                         textPart.text += '\n\n' + part.text;
                     } else {
@@ -892,7 +915,8 @@ export function mergeMessages(messages, names, { strict = false, placeholders = 
 
     // Squash consecutive messages with the same role
     messages.forEach((message) => {
-        if (mergedMessages.length > 0 && mergedMessages[mergedMessages.length - 1].role === message.role && message.content && message.role !== 'tool') {
+        if (mergedMessages.length > 0 && mergedMessages[mergedMessages.length - 1].role === message.role && message.content && message.role !== 'tool'
+            && !message.vertex_response && !mergedMessages[mergedMessages.length - 1].vertex_response) {
             mergedMessages[mergedMessages.length - 1].content += '\n\n' + message.content;
         } else {
             mergedMessages.push(message);
