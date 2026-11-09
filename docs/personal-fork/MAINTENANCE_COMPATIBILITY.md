@@ -42,7 +42,7 @@ Canonical compatibility document。涉及ST、Personal Fork、柏宝箱、柏宝
 
 | Component | Source / branch | 精确验证基线 |
 | --- | --- | --- |
-| Personal ST运行代码 | `SurgeXW0508/SillyTavern:stage/vertex-native-generation-contract` | 本文件所在Phase C-D提交（运行修复与本文同提交）；输入基线`6f3479d3e33dbfc890e7aef4ce4e9b90c0ae65c2`；精确交付SHA见Git提交及C-D交付记录 |
+| Personal ST运行代码 | `SurgeXW0508/SillyTavern:stage/vertex-native-generation-contract` | `090cbba6d40e5d117ab41a9e6deb20b40e2dc336`；Phase C冻结运行基线；之后的C-E0提交仅修改文档 |
 | 柏宝箱上游同步基线 | `baibai-git/ST-BaiBai-Tools:main` → `SurgeXW0508/ST-BaiBai-Tools:main` | `1e87dfaad87819a90d8032530a62a2ed29f97aea`，实际package/manifest版本1.1.5 |
 | 柏宝箱唯一个人部署分支 | `SurgeXW0508/ST-BaiBai-Tools:personal/stable` | `2f6a9c54d2c906b4a0e44d20c12d0712552e393d`，跟踪`origin/personal/stable` |
 | 柏宝库 | `baibai-git/baibaoku`原版，无Personal Fork | `b211a4e97fdaec24dc8b90c85ddc198fac9ac200`，0.7.3 |
@@ -148,9 +148,27 @@ Evidence：详见[Phase C-D closeout](PHASE_CD_CLOSEOUT.md)中的命令、边界
 
 ## Phase C Code Freeze
 
-**当前状态：Phase C-D开发完成的独立审查候选；正式Code Freeze待独立审查通过。** 不能由Work自审替代独立审查。通过后将状态明确登记为`Phase C Code Freeze`，固定最终三组件精确SHA，随后进入真实Google与隔离NAS/真实酒馆Candidate验收。
+**当前状态：Phase C Code Freeze，2026-11-09正式登记。** 根据用户在Phase C-E0任务中确认，Phase C-D已经通过独立审查；本次登记不是Work自审替代独立审查。真实Google、真实NAS、生产回滚仍待用户手工验收，不因冻结登记而视为通过。
 
-冻结后，不再因为SH尚有优化、benchmark更快或顺手重构修改Candidate。只允许真实验收P1、安全问题或数据正确性问题触发重新开发；必须记录复现、Owner、影响面和受影响测试，再提交新的候选。其余Pending项是未来独立阶段，不能作为持续增加当前Phase C diff的理由。
+| Frozen component | Branch / source | 精确SHA |
+| --- | --- | --- |
+| Personal ST Runtime | `SurgeXW0508/SillyTavern:stage/vertex-native-generation-contract` | `090cbba6d40e5d117ab41a9e6deb20b40e2dc336` |
+| Personal ST-BaiBai-Tools | `SurgeXW0508/ST-BaiBai-Tools:personal/stable` | `2f6a9c54d2c906b4a0e44d20c12d0712552e393d` |
+| BaiBaoKu原版0.7.3 | `baibai-git/baibaoku` | `b211a4e97fdaec24dc8b90c85ddc198fac9ac200` |
+
+C-E0只登记和交接文档；Stage HEAD可以因此前进，但Candidate Image输入必须仍为冻结Runtime SHA，不能改用浮动分支HEAD。Capability Ownership不变，Save Generate继续不装配，不新增兼容Hook/Adapter。
+
+冻结后仅以下情况允许重新开发：真实验收发现P1、安全问题、数据正确性问题。必须记录复现、Owner、影响面和受影响测试，再提交新的候选。Shalistera性能优化、benchmark更快、顺手重构、UI小优化和Pending Ownership尚未处理均不能解除冻结。
+
+真实NAS首次检查、构建、迁移、回滚和验收见[Phase C Deployment Handoff](PHASE_C_DEPLOYMENT_HANDOFF.md)。本轮不SSH、不构建/切换正式NAS、不合并release、不Tag/Release。柏宝箱AGENTS暂保留当前Stage canonical链接；最终Closeout合入release并确认文档存在后必须切换到release，不提前建立第二份矩阵。
+
+### 2026-11-09 — Phase C-E0 freeze registration
+
+Decision：登记上述已通过独立审查的冻结组合，代码侧停止；部署由用户在ChatGPT指导下手工执行。
+
+Owner Review：本轮只改变维护记录和交接文档，没有能力实现变更。Runtime、两个柏宝仓库、Dockerfile、默认配置、构建流程和依赖不变。旧Vertex/Save Generate外部patch不参与Candidate构建、安装或回滚。
+
+Boundary：NAS容器、挂载、当前插件版本、Backrest恢复点和旧Image仍待实机证据；构建或启动成功不能替代真实Google与整组合验收。
 
 ## Update Preflight（合并/发布前必须完成）
 
