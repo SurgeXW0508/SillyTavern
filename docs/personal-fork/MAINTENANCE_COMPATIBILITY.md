@@ -148,7 +148,7 @@ Evidence：详见[Phase C-D closeout](PHASE_CD_CLOSEOUT.md)中的命令、边界
 
 ## Phase C Code Freeze
 
-**当前状态：Phase C Code Freeze，2026-11-09正式登记。** 根据用户在Phase C-E0任务中确认，Phase C-D已经通过独立审查；本次登记不是Work自审替代独立审查。真实Google、真实NAS、生产回滚仍待用户手工验收，不因冻结登记而视为通过。
+**当前状态：Phase C Code Freeze，2026-11-09正式登记。** 当前发布入口见[Personal Release Operations](PERSONAL_RELEASE_OPERATIONS.md)，差异结论见[Final Delta Audit](FINAL_DELTA_AUDIT.md)。 根据用户在Phase C-E0任务中确认，Phase C-D已经通过独立审查；本次登记不是Work自审替代独立审查。用户后续已报告真实NAS Vertex RP、多轮、刷新、Stop、Regenerate通过；Candidate Image ID、healthy/RestartCount与实际插件SHA未提供。正式GHCR镜像重部署与最终smoke、生产回滚仍待用户实机完成。
 
 | Frozen component | Branch / source | 精确SHA |
 | --- | --- | --- |
@@ -156,7 +156,7 @@ Evidence：详见[Phase C-D closeout](PHASE_CD_CLOSEOUT.md)中的命令、边界
 | Personal ST-BaiBai-Tools | `SurgeXW0508/ST-BaiBai-Tools:personal/stable` | `2f6a9c54d2c906b4a0e44d20c12d0712552e393d` |
 | BaiBaoKu原版0.7.3 | `baibai-git/baibaoku` | `b211a4e97fdaec24dc8b90c85ddc198fac9ac200` |
 
-C-E0只登记和交接文档；Stage HEAD可以因此前进，但Candidate Image输入必须仍为冻结Runtime SHA，不能改用浮动分支HEAD。Capability Ownership不变，Save Generate继续不装配，不新增兼容Hook/Adapter。
+C-E0只登记和交接文档；Stage HEAD可以因此前进。C-E0本地Candidate输入为该冻结Runtime SHA；正式Personal Release使用经CI验证的固定Tag/source commit构建，并检查Runtime相对冻结SHA不变，不能改用浮动分支HEAD。Capability Ownership不变，Save Generate继续不装配，不新增兼容Hook/Adapter。
 
 冻结后仅以下情况允许重新开发：真实验收发现P1、安全问题、数据正确性问题。必须记录复现、Owner、影响面和受影响测试，再提交新的候选。Shalistera性能优化、benchmark更快、顺手重构、UI小优化和Pending Ownership尚未处理均不能解除冻结。
 
@@ -213,12 +213,20 @@ Boundary：NAS容器、挂载、当前插件版本、Backrest恢复点和旧Imag
 
 ## 版本与回滚
 
-release保持上游同步基线，个人改动仅在独立开发分支。每个变更记录来源、Owner、受影响能力和测试；上游同步先在隔离分支验证，不将Shalistera整分支合入。
+`upstream/release`保持纯官方同步基线；`release`从本次正式Closeout起承载已审查Personal稳定代码，个人开发在独立Stage。每个变更记录来源、Owner、受影响能力和测试；上游同步先在隔离分支验证，不将Shalistera整分支合入。
 
 部署时记录ST commit/不可变镜像digest、插件commit/跟踪分支和生产dist哈希、运行时、配置与数据备份位置。保留上一已验证组合及部署描述；回滚整套组合，不能只退ST而留下新的插件Hook。禁止以版本号标签代替运行代码证据。
 
-本轮未验证NAS运行版本、镜像、持久化目录、备份覆盖或生产插件。因此尚不宣称具备已验证生产回滚条件。真实环境验收前需确认这些证据及备份恢复能力；不读取聊天正文或秘密。
+已记录用户报告的Candidate真实RP验收；NAS镜像ID、容器健康计数、持久化/备份覆盖和实际插件SHA仍缺实机证据，不能宣称生产回滚已验证。正式镜像切换前核实这些证据；不读取聊天正文或秘密。
 
 柏宝箱Fork已在personal/stable放置简短AGENTS.md，链接本文，不复制矩阵。所有涉及柏宝的任务书必须显式要求先阅读本文；柏宝库仍保持上游原版。
 
 公开stable需要回滚时，优先以新的revert提交恢复已验证代码树，保留正常快进更新链；应急整组合快照恢复后暂停更新，不能通过强推stable倒退来驱动客户端回滚。
+
+## 2026-11-09 — Final Delta Audit / Personal Release
+
+Final Delta Audit未发现需重开Runtime的P1、安全、数据正确性或Owner阻断。16个运行/配置差异均有Core Owner与必要配套；官方release仍为原基线，SH仅参考、不自动同步。发布基础设施独立于Runtime，审查过的personal-release.json进入release后触发版本化GHCR与不可变Validated Stack资产；无latest、无NAS自动构建/部署。
+
+未来优先级：Official security/correctness → Personal Core compatibility → BaiBao compatibility → 用户真实新能力 → UX → performance/optional。升级前先读本文和当前Release的Validated Stack，再做Owner Review、Stage、受影响测试、Release和Deploy。
+
+回滚采用Current + Previous；过渡期旧官方1.19.0保留到下一次Personal Release成功。Runtime回滚与数据恢复分开，插件漂移时不能只退ST。临时备份/clone/image仅在正式GHCR重部署与最终smoke通过后清理。整个Phase C正式Closed仍以最后生产验收/Production Baseline登记为准。

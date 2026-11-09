@@ -1,0 +1,62 @@
+{
+  "schema_version": 1,
+  "version": "1.19.0-personal.1",
+  "tag": "v1.19.0-personal.1",
+  "runtime_commit": "090cbba6d40e5d117ab41a9e6deb20b40e2dc336",
+  "official_upstream": {
+    "repository": "SillyTavern/SillyTavern",
+    "branch": "release",
+    "commit": "06bde939fb1e9c4c8d8641d810f0a916b5bce127"
+  },
+  "image_repository": "ghcr.io/surgexw0508/sillytavern-personal",
+  "tools": {
+    "repository": "SurgeXW0508/ST-BaiBai-Tools",
+    "branch": "personal/stable",
+    "commit": "2f6a9c54d2c906b4a0e44d20c12d0712552e393d",
+    "runtime_tree_sha256": "0299cdd91d620e177b1d4ee492988b5ada600f591be35110f84065f0ababce2c",
+    "excluded_document": "AGENTS.md",
+    "save_generate": "not_assembled"
+  },
+  "baibaoku": {
+    "repository": "baibai-git/baibaoku",
+    "commit": "b211a4e97fdaec24dc8b90c85ddc198fac9ac200",
+    "version": "0.7.3"
+  },
+  "acceptance": {
+    "source": "user_report_2026-11-09",
+    "candidate_runtime": "090cbba6d40e5d117ab41a9e6deb20b40e2dc336",
+    "passed": [
+      "vertex_rp",
+      "multi_turn",
+      "refresh_then_generate",
+      "stop",
+      "regenerate"
+    ],
+    "not_reported": [
+      "swipe",
+      "continue",
+      "tool_call_real_model",
+      "non_vertex_smoke",
+      "candidate_image_id",
+      "container_health",
+      "restart_count",
+      "nas_tools_sha",
+      "nas_baibaoku_sha"
+    ],
+    "candidate_image_id": null,
+    "container_health": null,
+    "restart_count": null,
+    "nas_tools_sha": null,
+    "nas_baibaoku_sha": null,
+    "formal_image_nas_smoke": "pending",
+    "production_status": "pending_formal_image_acceptance"
+  },
+  "policies": {
+    "save_generate": "disabled",
+    "generate_retry": "disabled_for_validated_combination",
+    "extension_updates": "reviewed_branch_and_sha_only",
+    "server_plugin_auto_update": false,
+    "retention": "current_and_previous",
+    "official_bootstrap_rollback": "retain_until_next_personal_release_succeeds"
+  }
+}

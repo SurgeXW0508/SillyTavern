@@ -1,0 +1,161 @@
+name: Personal Release
+on:
+  push:
+    branches: [release]
+    paths: [personal-release.json]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: personal-release
+  cancel-in-progress: false
+jobs:
+  prepare:
+    if: github.repository == 'SurgeXW0508/SillyTavern' && github.ref == 'refs/heads/release'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    outputs:
+      commit: ${{ steps.meta.outputs.commit }}
+      tag: ${{ steps.meta.outputs.tag }}
+      image: ${{ steps.meta.outputs.image }}
+      version: ${{ steps.meta.outputs.version }}
+      date: ${{ steps.meta.outputs.date }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24
+      - run: node scripts/personal/release.mjs check
+      - run: node --test tests/personal/release.node.mjs
+      - name: Resolve release input
+        id: meta
+        run: |
+          node --input-type=module <<'JS' >> "$GITHUB_OUTPUT"
+          import { readFileSync } from 'node:fs';
+          const c = JSON.parse(readFileSync('personal-release.json'));
+          console.log(`commit=${process.env.GITHUB_SHA}\ntag=${c.tag}\nimage=${c.image_repository}\nversion=${c.version}\ndate=${new Date().toISOString()}`);
+          JS
+      - name: Create immutable source tag
+        env:
+          TAG: ${{ steps.meta.outputs.tag }}
+        run: |
+          if git rev-parse --verify "refs/tags/$TAG" >/dev/null 2>&1; then
+            test "$(git rev-parse "$TAG^{commit}")" = "$GITHUB_SHA"
+          else
+            git config user.name github-actions[bot]
+            git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+            git tag -a "$TAG" "$GITHUB_SHA" -m "Personal SillyTavern $TAG"
+            git push origin "refs/tags/$TAG"
+          fi
+  build:
+    needs: prepare
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      digest: ${{ steps.push.outputs.digest }}
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ needs.prepare.outputs.commit }}
+      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+      - name: Authenticate to GHCR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: printf '%s' "$GH_TOKEN" | docker login ghcr.io --username "$GITHUB_ACTOR" --password-stdin
+      - name: Refuse to overwrite an existing image version
+        env:
+          IMAGE: ${{ needs.prepare.outputs.image }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          if docker buildx imagetools inspect "$IMAGE:$VERSION" >/dev/null 2>&1; then
+            echo 'Image version already exists. Retry only failed publication jobs; do not rebuild a published version.' >&2
+            exit 1
+          fi
+      - name: Build and push exact tagged source
+        id: push
+        env:
+          IMAGE: ${{ needs.prepare.outputs.image }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+          BUILD_DATE: ${{ needs.prepare.outputs.date }}
+          CORE_COMMIT: ${{ needs.prepare.outputs.commit }}
+        run: |
+          RUNTIME=$(node -p "require('./personal-release.json').runtime_commit")
+          UPSTREAM=$(node -p "require('./personal-release.json').official_upstream.commit")
+          docker buildx build --platform linux/amd64,linux/arm64 --file Dockerfile --push --tag "$IMAGE:$VERSION" \
+            --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" \
+            --label "org.opencontainers.image.revision=$CORE_COMMIT" \
+            --label "org.opencontainers.image.version=$VERSION" \
+            --label "org.opencontainers.image.created=$BUILD_DATE" \
+            --label "io.sillytavern.personal.runtime-revision=$RUNTIME" \
+            --label "io.sillytavern.personal.upstream-revision=$UPSTREAM" \
+            --metadata-file "$RUNNER_TEMP/personal-build.json" .
+          node --input-type=module <<'JS' >> "$GITHUB_OUTPUT"
+          import { readFileSync } from 'node:fs';
+          console.log(`digest=${JSON.parse(readFileSync(process.env.RUNNER_TEMP + '/personal-build.json'))['containerimage.digest']}`);
+          JS
+      - name: Native image startup smoke (no Google credentials or production data)
+        env:
+          IMAGE: ${{ needs.prepare.outputs.image }}
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          docker pull "$IMAGE@$DIGEST"
+          trap 'docker rm -f personal-release-smoke >/dev/null 2>&1 || true' EXIT
+          docker run -d --name personal-release-smoke "$IMAGE@$DIGEST"
+          for i in $(seq 1 45); do
+            if docker exec personal-release-smoke node src/healthcheck.js; then exit 0; fi
+            sleep 2
+          done
+          echo 'Release image failed isolated startup health check' >&2
+          exit 1
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: personal-build-metadata
+          path: ${{ runner.temp }}/personal-build.json
+  publish:
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ needs.prepare.outputs.commit }}
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24
+      - name: Assemble the immutable validated stack assets
+        env:
+          CORE_COMMIT: ${{ needs.prepare.outputs.commit }}
+          IMAGE_DIGEST: ${{ needs.build.outputs.digest }}
+          BUILD_DATE: ${{ needs.prepare.outputs.date }}
+          BUILD_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          node scripts/personal/release.mjs manifest
+          cp deploy/personal/verify-stack.py release-output/verify-stack.py
+          cd release-output
+          sha256sum validated-stack.json stack.env verify-stack.py RELEASE_NOTES.md > SHA256SUMS
+      - name: Publish personal release (no npm or NAS deployment)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            if test "$(gh release view "$TAG" --json isDraft --jq .isDraft)" = false; then
+              echo 'Release is already published; preserving immutable assets.'
+              exit 0
+            fi
+          else
+            gh release create "$TAG" --draft --verify-tag --title "Personal SillyTavern $TAG" --notes-file release-output/RELEASE_NOTES.md
+          fi
+          gh release upload "$TAG" --clobber release-output/validated-stack.json release-output/stack.env release-output/verify-stack.py release-output/SHA256SUMS release-output/RELEASE_NOTES.md
+          gh release edit "$TAG" --draft=false
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: personal-release-assets
+          path: release-output

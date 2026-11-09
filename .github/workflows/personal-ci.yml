@@ -1,0 +1,34 @@
+name: Personal Core CI
+on:
+  push:
+    branches: [stage/vertex-native-generation-contract]
+  pull_request:
+    branches: [release]
+    types: [opened, synchronize, reopened]
+permissions:
+  contents: read
+jobs:
+  verify:
+    if: github.repository == 'SurgeXW0508/SillyTavern'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 24
+      - run: npm ci --ignore-scripts
+      - run: npm ci --ignore-scripts --prefix tests
+      - run: npm run lint
+      - run: npm run test:unit --prefix tests -- --runInBand
+      - run: npm run test:vertex
+      - run: npm run test:reliability
+      - run: node --test tests/personal/release.node.mjs
+      - run: python3 -m unittest discover -s tests/personal -p 'test_*.py' -v
+      - run: node scripts/personal/release.mjs check
+      - name: Verify frozen Tools policy independently
+        run: |
+          git clone --no-checkout https://github.com/SurgeXW0508/ST-BaiBai-Tools.git "$RUNNER_TEMP/personal-tools"
+          git -C "$RUNNER_TEMP/personal-tools" checkout --detach 2f6a9c54d2c906b4a0e44d20c12d0712552e393d
+          npm run test:personal-stable --prefix "$RUNNER_TEMP/personal-tools"
