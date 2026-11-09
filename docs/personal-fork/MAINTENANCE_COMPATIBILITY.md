@@ -2,9 +2,29 @@
 
 Canonical compatibility document。当前正式制品为[v1.19.0-personal.1](https://github.com/SurgeXW0508/SillyTavern/releases/tag/v1.19.0-personal.1)；生产事实与待补项见[PRODUCTION_BASELINE.json](PRODUCTION_BASELINE.json)。涉及ST、Personal Fork、柏宝箱、柏宝库、Shalistera引入的任务，开始前必须阅读本文件，完成Capability Ownership Review；其他任务书或未来插件Fork只引用本文件，不复制冲突矩阵。
 
+## 接手入口与当前生产状态
+
+先读[Production Baseline](PRODUCTION_BASELINE.json)确认实际部署，再对照本文Owner规则，最后按[Release Operations](PERSONAL_RELEASE_OPERATIONS.md)执行对应更新；正式镜像的实际验收范围见[Release Closeout](RELEASE_CLOSEOUT.md)。无需从历史聊天恢复当前版本。
+
+2026-11-09用户提供的NAS结果：`v1.19.0-personal.1`正式GHCR Digest已部署，容器`sillytavern`为`healthy`、核验时RestartCount为0；NAS Tools实际为`2f6a9c54`且origin为个人Fork、tracking为`origin/personal/stable`、工作区clean；BaiBaoKu为原版`b211a4e9`/0.7.3。完整SHA、Digest和实际Image ID以Production Baseline为准。
+
+正式镜像仅确认启动、Health、Vertex普通RP正文生成、刷新后聊天记录保留。Candidate的多轮、Stop、Regenerate等历史结果单独保留，不自动算作正式镜像已验证。清理、备份恢复、飞牛GUI方案和既有安全警告的后续责任见Operations待办；本轮不处理这些事项。
+
+Decision Log、SH取舍索引及C-E0交接是对应阶段的历史证据。已发布Release资产中的compatibility是发布时快照，不修改其内容来补填后续实机结果；当前生产事实更新在Production Baseline。
+
 ## 稳定维护原则
 
-优先级：稳定性 > 数据正确性 > 核心功能 > 体验增强 > 性能优化。
+**稳定性优先于功能完整性。** 优先级：稳定性 > 数据正确性 > 核心功能 > 体验增强 > 性能优化。
+
+遇到ST与柏宝能力重叠时依次判断：
+
+1. ST Core已提供可靠原生能力，优先关闭柏宝重复能力。
+2. 柏宝实现更合适，且ST对应实现仅是非必要优化时，可以移除该ST优化，保留一个Owner。
+3. 仍存在生命周期冲突时，可以直接放弃柏宝相关能力。
+4. 宁可放弃优化或功能，也不为保留重复实现增加复杂Hook/Adapter。
+5. 不允许局部功能破坏稳定环境；更新任一仓库必须检查另两个仓库的影响。当前通过不代表未来更新免检。
+
+同时遵守以下实现与生命周期约束：
 
 1. 单能力单Owner；原生实现完整可靠且性能可接受时优先ST。
 2. 删除优于兼容。上游吸收个人改动后优先删除个人实现；成熟替代实现出现时重新选择Owner。
@@ -13,6 +33,16 @@ Canonical compatibility document。当前正式制品为[v1.19.0-personal.1](htt
 5. Feature Off必须退出装配、监听、拦截、轮询和任务创建；仅在回调里判断开关不算退出。
 6. 一次请求只有一个生命周期Owner，终态结算一次。派发后不得通过fallback重发模型请求。
 7. 保持每用户凭据/OAuth隔离、代理origin允许列表、禁止自动重定向、既有私网过滤和不记录Prompt/秘密的边界。
+
+## 三仓库维护关系
+
+| 组件 | 正式维护来源 / 维护方 | 分支与职责 |
+| --- | --- | --- |
+| SillyTavern Personal | `SurgeXW0508/SillyTavern`，个人维护者负责审查和发布；官方ST是长期上游 | `upstream/release`纯官方基线，`stage/*`独立开发/验证，`release`个人正式稳定分支；Core拥有原生生成与消息/历史正确性，生产使用验证过的GHCR Digest |
+| ST-BaiBai-Tools | `SurgeXW0508/ST-BaiBai-Tools`维护最小个人策略；`baibai-git/ST-BaiBai-Tools`为功能上游 | `main`仅同步上游，`personal/stable`唯一部署分支；负责独立前端体验，Save Generate不装配，不再取得Core生成生命周期 |
+| BaiBaoKu | `baibai-git/baibaoku`上游维护代码，个人维护者只固定/验证使用组合 | 保持原版，无个人Fork；负责独立Server Plugin/数据库/服务，核心接口接管等变更必须重新审查边界 |
+
+三仓库分别升级，不因更新其中一个而顺手更新另一个。Shalistera仅作为参考来源；没有自动同步或整分支合入关系。
 
 ## 当前能力Owner
 
@@ -26,7 +56,7 @@ Canonical compatibility document。当前正式制品为[v1.19.0-personal.1](htt
 | 历史Prompt语义 | ST | — | 当前消息为语义来源，不能因旧response ID恢复已编辑/删除正文 |
 | 基础聊天保存 | ST | 柏宝恢复不采用 | 保持上游公共saveChat契约；不得删除已有数据 |
 | Save Generate / 后台任务 / 消息恢复 | 柏宝，但本组合不启用 | ST正常生成 | 整个Save Generate关闭；不保留Vertex内部调用契约 |
-| 自动重试/黑名单重试 | Pending Ownership Review | 柏宝可选功能 | 本轮验证设置关闭；不得据此报告宣称其可安全接管Vertex |
+| 自动重试/黑名单重试（Generate Retry） | Pending Ownership Review | 柏宝独立可选功能 | 与Save Generate不同；不从Save Generate不装配推断其开关或兼容性，不宣称其可安全接管Vertex |
 | 独立体验UI | 柏宝箱 | 未在本轮重新审查 | 不得获得Vertex生成生命周期所有权 |
 | 独立数据库/服务 | 柏宝库 | 未在本轮重新审查 | 保持原版；不能凭服务存在推断已启用Save Generate |
 | Fast Chat / Character Cache / Early Bridge | Pending Ownership Review | 多方 | R2/R3/R4后置，不提前选Owner |
@@ -36,7 +66,7 @@ Canonical compatibility document。当前正式制品为[v1.19.0-personal.1](htt
 
 ## Disabled Features
 
-**当前个人验证组合关闭所有Provider的Save Generate。** 这是当前维护策略，不是Vertex API能力限制。用户接受失去关闭页面后继续生成及恢复的体验。
+**当前个人稳定组合通过不装配关闭所有Provider的Save Generate。** 这是当前维护策略，不是Vertex API能力限制。用户接受失去关闭页面后继续生成及恢复的体验。
 
 当前维护模型已经由Phase C-B转为正式Fork分支，不再在部署时应用外部patch。
 
@@ -47,13 +77,13 @@ Canonical compatibility document。当前正式制品为[v1.19.0-personal.1](htt
 | 柏宝箱唯一个人部署分支 | `SurgeXW0508/ST-BaiBai-Tools:personal/stable` | `2f6a9c54d2c906b4a0e44d20c12d0712552e393d`为验证Runtime；维护HEAD `ac1279a7535a424c3dc3b2f7a5b2913783fdf7e8`仅AGENTS链接，源码/dist相同；跟踪`origin/personal/stable` |
 | 柏宝库 | `baibai-git/baibaoku`原版，无Personal Fork | `b211a4e97fdaec24dc8b90c85ddc198fac9ac200`，0.7.3 |
 
-这些是隔离验证组合，不是NAS安装版本断言。柏宝箱个人差异只有Save Generate生命周期关闭策略、对应构建/测试和简短维护入口；没有Vertex Adapter，也没有其他柏宝优化修改。
+上述包含冻结验证基线与仓库维护HEAD；当前NAS实际组合已在Production Baseline登记，Tools实际仍为`2f6a9c54`，不能用维护HEAD `ac1279a7`替代。柏宝箱个人差异只有Save Generate生命周期关闭策略、对应构建/测试和简短维护入口；没有Vertex Adapter，也没有其他柏宝优化修改。
 
-当前1.1.5仍无条件装配Save Generate、默认开启并存在false→true旧迁移。Personal Stable在装配入口移除导入/安装及面板通知，设置归一false、移除强制开启迁移、UI固定禁用；不物理删除上游模块，不改Generate Retry实现。生产dist从锁定依赖的源码构建，连续两次构建哈希一致。
+此前审查的上游1.1.5仍无条件装配Save Generate、默认开启并存在false→true旧迁移。Personal Stable在装配入口移除导入/安装及面板通知，设置归一false、移除强制开启迁移、UI固定禁用；不物理删除上游模块，也不需要手工删源码或额外Patch。Generate Retry是另一功能，本策略没有修改其实现。生产dist从锁定依赖的源码构建，连续两次构建哈希一致。
 
 Phase C基于1.1.2的外部策略patch，以及更早的两个Vertex兼容patch，只作为历史过程证据。它们不再是正式安装、更新或回滚步骤；不要叠加到personal/stable上。柏宝库源代码保持原版。
 
-安装或更新Personal Stable后必须全页重新加载；不承诺已经运行的旧JS页面热卸载。旧后台任务、数据库记录和聊天数据不被删除或自动恢复；切换前必须在原环境检查并结算/导出需要保留的任务。进程重启/全页重新加载属于后续隔离验收，不在本轮操作正式环境。
+安装或更新Personal Stable后必须全页重新加载；不承诺已经运行的旧JS页面热卸载。旧后台任务、数据库记录和聊天数据不被删除或自动恢复；切换前必须在原环境检查并结算/导出需要保留的任务。未来升级后的进程启动/全页重载需要在对应任务中验证；本轮只登记文档，不操作正式环境。
 
 重新启用前必须重新进行Owner Review，证明功能不可替代、禁用/销毁闭合、持久化确认和回滚可靠；优先采用能够真正关闭并独立运行的上游实现。不要重新添加Vertex Save Generate Contract来恢复此功能。
 
@@ -93,7 +123,7 @@ Evidence：详见[Phase C-D closeout](PHASE_CD_CLOSEOUT.md)中的命令、边界
 
 参考固定到`Shalistera/SillyTavern:release@f67e000034a130dc25c7fb7571b5731f4c219f89`。共同基线为`06bde939fb1e9c4c8d8641d810f0a916b5bce127`，相差31提交。它比1.19.0 tag `7e8663cd9c184a550b37238218bdd32c6efc68e9`多一项npm发布workflow修复，因此最初按tag统计的32提交不是遗漏。
 
-`Adopt Now`表示本轮已实现，不是待办；混合提交只采用Reason栏明确限定的部分。没有整体merge/cherry-pick。宏观分类按实际diff的功能范围完成，不宣称对未采用模块逐行审计。
+以下“本轮”和`Adopt Now`对应历史Phase C-D开发，表示当时已实现，不是本轮文档任务新增Runtime或待办；混合提交只采用Reason栏明确限定的部分。没有整体merge/cherry-pick。宏观分类按实际diff的功能范围完成，不宣称对未采用模块逐行审计。
 
 | SH Capability | Status | Owner | Reason |
 | --- | --- | --- | --- |
@@ -148,7 +178,7 @@ Evidence：详见[Phase C-D closeout](PHASE_CD_CLOSEOUT.md)中的命令、边界
 
 ## Phase C Code Freeze
 
-**当前状态：Phase C Code Freeze，2026-11-09正式登记。** 当前发布入口见[Personal Release Operations](PERSONAL_RELEASE_OPERATIONS.md)，差异结论见[Final Delta Audit](FINAL_DELTA_AUDIT.md)。 根据用户在Phase C-E0任务中确认，Phase C-D已经通过独立审查；本次登记不是Work自审替代独立审查。用户后续已报告真实NAS Vertex RP、多轮、刷新、Stop、Regenerate通过；Candidate Image ID、healthy/RestartCount与实际插件SHA未提供。正式GHCR镜像重部署与最终smoke、生产回滚仍待用户实机完成。
+**当前状态：Phase C Code Freeze，2026-11-09正式登记。** 当前发布入口见[Personal Release Operations](PERSONAL_RELEASE_OPERATIONS.md)，差异结论见[Final Delta Audit](FINAL_DELTA_AUDIT.md)。 根据用户在Phase C-E0任务中确认，Phase C-D已经通过独立审查；本次登记不是Work自审替代独立审查。Candidate阶段曾报告多轮、刷新后继续、Stop、Regenerate等通过。当前正式GHCR镜像已完成NAS切换及基本验收，Image ID、healthy/RestartCount与两插件实际SHA已登记；正式镜像未复验能力、安全警告评估和生产数据恢复演练仍单独保留为待办。
 
 | Frozen component | Branch / source | 精确SHA |
 | --- | --- | --- |
@@ -160,7 +190,7 @@ C-E0只登记和交接文档；Stage HEAD可以因此前进。C-E0本地Candidat
 
 冻结后仅以下情况允许重新开发：真实验收发现P1、安全问题、数据正确性问题。必须记录复现、Owner、影响面和受影响测试，再提交新的候选。Shalistera性能优化、benchmark更快、顺手重构、UI小优化和Pending Ownership尚未处理均不能解除冻结。
 
-C-E0首次手工Candidate过程保留在[历史交接](PHASE_C_DEPLOYMENT_HANDOFF.md)。本次Final Closeout已通过审查和CI，快进合入release并发布v1.19.0-personal.1，Tools AGENTS已切换到release链接。正式镜像与更新/回滚入口见[Personal Release Operations](PERSONAL_RELEASE_OPERATIONS.md)；没有SSH、正式NAS切换或生产清理，也不建立第二份Owner矩阵。
+C-E0首次手工Candidate过程保留在[历史交接](PHASE_C_DEPLOYMENT_HANDOFF.md)。此前Final Delta Audit / 发布收口已通过审查和CI，快进合入release并发布v1.19.0-personal.1，Tools AGENTS已切换到release链接。正式镜像与更新/回滚入口见[Personal Release Operations](PERSONAL_RELEASE_OPERATIONS.md)。用户之后已完成正式NAS镜像切换；Work本轮没有SSH或生产操作，也未清理资产。Owner矩阵仍只维护在本文。
 
 ### 2026-11-09 — Phase C-E0 freeze registration
 
@@ -168,12 +198,12 @@ Decision：登记上述已通过独立审查的冻结组合，代码侧停止；
 
 Owner Review：本轮只改变维护记录和交接文档，没有能力实现变更。Runtime、两个柏宝仓库、Dockerfile、默认配置、构建流程和依赖不变。旧Vertex/Save Generate外部patch不参与Candidate构建、安装或回滚。
 
-Boundary：NAS容器、挂载、当前插件版本、Backrest恢复点和旧Image仍待实机证据；构建或启动成功不能替代真实Google与整组合验收。
+当时的Boundary（历史记录，不代表当前生产状态）：NAS容器、挂载、当时插件版本、Backrest恢复点和旧Image仍待实机证据；构建或启动成功不能替代真实Google与整组合验收。
 
 ## Update Preflight（合并/发布前必须完成）
 
-1. 核验三个项目各自目标版本/commit、工作区、本地修改与当前验证组合；未核实NAS版本就标为未知。
-2. 列出变更涉及的Capability，记录Owner Review结论。
+1. 先读Production Baseline和当前Release的Validated Stack，再核验三个项目各自目标版本/commit、工作区、本地修改；未知实机字段不猜测。
+2. 即使只更新一个项目，也列出其对另两个项目的接口、Hook、状态、数据与生命周期影响，记录Owner Review结论。
 3. 对照上表，检查新能力重叠、Hook顺序、状态与生命周期所有权。
 4. 检查官方是否已吸收个人改进；吸收后优先移除对应个人diff。
 5. 已有成熟Owner时关闭/删除另一实现，不新增协调两套实现的兼容层。
@@ -182,6 +212,15 @@ Boundary：NAS容器、挂载、当前插件版本、Backrest恢复点和旧Imag
 8. 执行受影响的Core回归、插件策略检查和隔离集成；涉及认证/代理/模型时增加真实环境验收。Mock通过不能替代实机。
 9. 更新本Ownership Matrix、Disabled Features、Decision Log、支持矩阵与精确组合记录。
 10. 记录验证结果与回滚点后，才可进入另行授权的合并/发布。禁止先升级再故障补丁。
+
+## SillyTavern官方更新流程
+
+1. 查看官方Release与代码差异，记录目标commit；不因新版本出现直接合入。
+2. 读取当前生产组合和Owner规则，对比Official、Personal，以及实际相关的Shalistera参考实现；不重新吸收无关优化。
+3. 判断能力应由Core还是柏宝持有；官方已有可靠等价能力时优先删个人diff或关闭另一侧重复能力，不建立协调双实现的Adapter。
+4. 将已选择官方基线同步到`upstream/release`，在独立`stage/*`适配个人差异；保持正式release和NAS不动。
+5. 完成代码审查、CI和受影响的三方组合测试，记录各自精确SHA和回滚组合。
+6. 经任务授权合入个人release，使用既有Personal Release Workflow生成Tag/GHCR/Validated Stack；NAS仅拉取验证过的正式Digest，Health/Smoke成功后更新Current/Previous和Production Baseline。
 
 ## 柏宝箱安装、更新与上游同步
 
@@ -193,7 +232,7 @@ Boundary：NAS容器、挂载、当前插件版本、Backrest恢复点和旧Imag
 
 1. 开始任务先读本文和`personal/stable`的AGENTS.md；不要依赖纯main中存在个人维护文件。
 2. 核验上游目标commit、Fork main/stable当前HEAD、当前组合和本地修改。允许固定已验证版本，不追逐无关更新。
-3. 将Fork main按fast-forward同步到已选择的上游基线；main不放个人代码或维护策略。
+3. 将Fork main按fast-forward同步到已选择的上游基线；main不放个人代码或维护策略，不用上游URL无条件更新生产。
 4. 列出受影响Capability、阅读Owner矩阵、检查上游是否已有真正Feature Off。若已有且验证可靠，优先删除个人策略，不能保留两套。
 5. 从现有stable建立独立候选，将已审查main合入并解决最小个人差异。默认保留公开stable历史，避免重写正在被扩展管理器跟踪的分支。
 6. 执行`npm ci --ignore-scripts`、`npm run build`、`npm run test:personal-stable`及受影响原有测试；核对源码/dist同步及未增加依赖。
@@ -209,7 +248,12 @@ Boundary：NAS容器、挂载、当前插件版本、Backrest恢复点和旧Imag
 
 不建立无代码差异的Personal Fork。固定原版精确commit，避免生产静默升级。隔离组合已用ST配置`enableServerPluginsAutoUpdate: false`，同时阻止ST启动更新器和柏宝库读取该配置的自更新入口；没有修改正式配置，也没有把仓库默认值改掉。
 
-生产升级前先确认目标commit，做Capability Ownership Review，检查其是否触及ST或柏宝箱Owner，再隔离验证、记录整组合和回滚点后升级。单独设置柏宝库的git自更新开关不能替代核验ST自己的启动自动更新设置。
+未来柏宝库升级流程：
+
+1. 确认上游目标版本/commit、当前实际SHA及本地修改，不建立无代码差异的个人Fork。
+2. 做Owner Review，重点审查Server Plugin启动/销毁/升级、数据库和聊天保存、Extension Manager、自更新，以及它们与ST/柏宝箱的接口与生命周期。
+3. 用当前ST和Tools组合隔离验证，确认数据兼容、异常回退和回滚边界；不要顺手升级Tools。
+4. 经对应任务授权才更新NAS的原版插件；核验实际SHA和相关功能后更新Production Baseline/验证组合。单独设置柏宝库的git自更新开关不能替代核验ST启动自动更新设置；不为验证强制开启未使用的接管功能。
 
 ## 版本与回滚
 
@@ -217,7 +261,7 @@ Boundary：NAS容器、挂载、当前插件版本、Backrest恢复点和旧Imag
 
 部署时记录ST commit/不可变镜像digest、插件commit/跟踪分支和生产dist哈希、运行时、配置与数据备份位置。保留上一已验证组合及部署描述；回滚整套组合，不能只退ST而留下新的插件Hook。禁止以版本号标签代替运行代码证据。
 
-已记录用户报告的Candidate真实RP验收；NAS镜像ID、容器健康计数、持久化/备份覆盖和实际插件SHA仍缺实机证据，不能宣称生产回滚已验证。正式镜像切换前核实这些证据；不读取聊天正文或秘密。
+正式GHCR部署、实际Image ID、容器healthy/RestartCount=0及两插件SHA已由用户提供并登记。Backrest自动备份/恢复验证、真实生产数据恢复演练尚未完成；因此不宣称完整生产恢复能力已验证。Current/Previous与数据恢复分开，完整目录备份和官方过渡回滚镜像继续保留；不读取聊天正文或秘密。
 
 柏宝箱Fork已在personal/stable放置简短AGENTS.md，链接本文，不复制矩阵。所有涉及柏宝的任务书必须显式要求先阅读本文；柏宝库仍保持上游原版。
 
@@ -229,7 +273,7 @@ Final Delta Audit未发现需重开Runtime的P1、安全、数据正确性或Own
 
 未来优先级：Official security/correctness → Personal Core compatibility → BaiBao compatibility → 用户真实新能力 → UX → performance/optional。升级前先读本文和当前Release的Validated Stack，再做Owner Review、Stage、受影响测试、Release和Deploy。
 
-回滚采用Current + Previous；过渡期旧官方1.19.0保留到下一次Personal Release成功。Runtime回滚与数据恢复分开，插件漂移时不能只退ST。临时备份/clone/image仅在正式GHCR重部署与最终smoke通过后清理。整个Phase C正式Closed仍以最后生产验收/Production Baseline登记为准。
+回滚采用Current + Previous；过渡期旧官方1.19.0保留到下一次Personal Release成功。Runtime回滚与数据恢复分开，插件漂移时不能只退ST。正式GHCR重部署与最终smoke通过只是清理前提，不构成当前清理授权；仍须单独核实备份保障和保留策略。当前正式镜像基本验收已登记，最终文档等待独立审查；其余未验收能力、备份/GUI/安全评估和清理属于明确保留的维护待办。
 
 ## v1.19.0-personal.1 — 发布结果
 
@@ -237,4 +281,10 @@ Final Delta Audit未发现需重开Runtime的P1、安全、数据正确性或Own
 
 Personal Core CI与Personal Release均成功；amd64/arm64镜像已推送，amd64无凭据隔离启动health smoke通过。实际匿名读取GHCR manifest成功，digest为`sha256:22973f7169fa694a0894b054e2b754ccf0ea881703d32a011e473c79c87ac740`，与Release资产一致。
 
-三组件精确验证pin和用户已报告/尚未报告验收范围写入Release的Validated Stack；当前实际NAS元数据仍待补。源代码与发布侧已收口，整个Phase C生产Closed仍等待正式GHCR重部署与最终实机smoke；完成前不清理回滚资产。
+Release的Validated Stack保留发布时冻结pin和当时验收快照，保持不可变。当前实际NAS元数据及正式镜像基本验收已补入Production Baseline；本轮只在独立文档分支登记，等待独立审查，不重新发布或改制品。Candidate、临时目录、完整备份和旧官方镜像仍保留；飞牛GUI更新方式和Backrest/恢复/安全评估等待办见Operations，不宣称已完成。
+
+## 2026-11-09 — Final Documentation Closeout
+
+Decision：以用户提供的正式NAS输出补齐当前生产组合，区分正式镜像四项基本验收与Candidate历史验证。仓库维护HEAD、Release source、Runtime和NAS实际插件SHA分别记录，不能互相替代。
+
+Scope：只更新维护/操作/验收文档、Production Baseline和根AGENTS；独立文档分支提交待审，不合并、不发布、不操作NAS，也不处理清理、GUI方案、备份恢复或既有安全警告。

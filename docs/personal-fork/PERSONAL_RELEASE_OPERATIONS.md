@@ -1,66 +1,86 @@
 # Personal Release / NAS Operations
 
-本文件定义发布和人工部署入口；Owner唯一来源仍为[canonical maintenance](MAINTENANCE_COMPATIBILITY.md)。最终差异结论见[Final Delta Audit](FINAL_DELTA_AUDIT.md)。
+接手时先读[PRODUCTION_BASELINE.json](PRODUCTION_BASELINE.json)确认真实Current，再读[MAINTENANCE_COMPATIBILITY.md](MAINTENANCE_COMPATIBILITY.md)完成三仓库Owner Review。本文负责发布/部署/回滚流程；[RELEASE_CLOSEOUT.md](RELEASE_CLOSEOUT.md)负责本版实际验收范围。历史审查见[Final Delta Audit](FINAL_DELTA_AUDIT.md)，不再从历史聊天推断当前状态。
+
+## 当前正式生产状态
+
+2026-11-09用户提供的NAS结果确认：`v1.19.0-personal.1`正式GHCR镜像已经切换到容器`sillytavern`，Health为`healthy`，核验时RestartCount为0。当前Compose使用固定Digest：
+
+```text
+ghcr.io/surgexw0508/sillytavern-personal@sha256:22973f7169fa694a0894b054e2b754ccf0ea881703d32a011e473c79c87ac740
+```
+
+实际Image ID为`sha256:dfb4f08735296b0b7610e9936cbce707af8d0021ac6d4eaafadc93c074b09e01`。Release source是`1af2180585e5bbe49159bc8884d5c890641f13c3`，Runtime仍是`090cbba6d40e5d117ab41a9e6deb20b40e2dc336`；后续文档HEAD不是新的镜像source。
+
+NAS Tools实际为`personal/stable@2f6a9c54d2c906b4a0e44d20c12d0712552e393d`，origin为个人Fork，tracking为`origin/personal/stable`，工作区clean；BaiBaoKu为原版0.7.3/`b211a4e97fdaec24dc8b90c85ddc198fac9ac200`。Tools仓库维护HEAD `ac1279a7`仅改AGENTS链接，不能把它写成NAS已安装SHA。
+
+正式镜像只确认启动、Health、Vertex普通RP正文生成和刷新后聊天记录保留。Candidate多轮/Stop/Regenerate等历史测试单独记录，未在正式环境复验的能力不标通过。生产数据恢复和安全评估也不由healthy状态代替。
 
 ## 发布源与分支
 
-- `upstream/release`：纯官方release同步基线，当前`06bde939fb1e9c4c8d8641d810f0a916b5bce127`。不放个人策略。
-- `stage/...`：独立审查/测试候选。`release`：Personal正式稳定代码；不再把它当未修改官方镜像。
-- `personal-release.json`：审查过的版本、上游基线、Runtime SHA、插件pin和已知验收范围。只有明确修改此发布清单并合入release才触发正式发布。
-- 不同步SH分支；不得因参考Fork新增优化而改当前Freeze。
+- `upstream/release`：纯官方release同步基线，当前`06bde939fb1e9c4c8d8641d810f0a916b5bce127`，不放个人策略。
+- `stage/*`：独立开发和验证。`release`：Personal正式稳定分支。
+- `personal-release.json`：审查过的版本、上游基线、Runtime SHA、插件pin和当时验收范围；发布授权后按既有流程使用。本轮没有修改该文件。
+- Shalistera仅为参考，不自动同步。任何组件更新都要先核查另两个组件，具体流程以canonical文档为准。
 
-发布流程：Review → Stage → Personal Core CI通过/behind 0 → 合入release → Personal Release Actions → Git Tag + GHCR版本镜像 + Release资产 → 用户NAS部署。初次采用已验证Stage的fast-forward合入，保留原提交来源。官方机器人及npm发布workflow在Fork中不运行，不要求用户复制官方Bot Secret或配置npm凭据。
+长期流程：**Review → Stage → CI → Release/Tag → GHCR → NAS Compose → Health/Smoke**。只有经过审查和CI的候选才合入release，通过既有Personal Release Workflow生成版本化制品；不因官方或柏宝有新提交直接升级生产，也不顺手更新伴随插件。
 
-Personal Release在一个流水线中创建固定Tag、构建同一commit、推送GHCR、跑无凭据/无生产数据的镜像启动health smoke、生成资产并发布draft Release。GITHUB_TOKEN生成的Tag不会可靠触发第二条workflow，所以不依赖级联事件。只发布明确版本，不创建个人latest/浮动release镜像别名。已存在镜像版本拒绝覆盖；失败仅重跑失败job，成功的build不重建。已公开Release不覆盖其资产；需要变更重新出版本。
+既有Personal Release流水线创建固定Tag、构建同一source commit、推送GHCR、执行无凭据/无生产数据的镜像启动health smoke，再发布附带资产的Release。GITHUB_TOKEN生成的Tag不作为级联触发另一workflow的依赖。不发布个人latest；同版本不覆盖，失败仅重跑失败job，成功build不重建，已公开资产不追改。本轮不重跑、修改或发布任何制品。
 
-镜像支持linux/amd64与linux/arm64构建；本流水线启动smoke仅在原生amd64执行，不把arm64构建成功当成NAS实机验收。Dockerfile及Runtime未改；base仍为浮动`node:lts-alpine3.23`，因此运行部署固定本次实际digest，不能把同源码未来重建当字节相同镜像。
+镜像支持linux/amd64与linux/arm64构建，历史流水线启动smoke仅在原生amd64执行；构建成功不是其他平台实机验收。Dockerfile的base仍为浮动`node:lts-alpine3.23`，生产固定本次已验证Digest，不把未来同源码重建视为相同镜像。
 
-## Validated Stack唯一发行记录
+## Validated Stack与生产事实
 
-每个GitHub Personal Release附带：
+每个正式Release保留：
 
-- `validated-stack.json`：Tag/source commit、冻结Runtime、官方baseline、版本镜像/digest/build date/Actions URL、Tools branch/pin/runtime tree指纹、原版BaiBaoKu pin、真实验收范围及缺失项。
-- `stack.env`：唯一非秘密的`ST_IMAGE=ghcr.io/...@sha256:...`，供现有Compose使用。
-- `verify-stack.py`：只读检查，不pull、不checkout、不重启、不修改数据。
-- `SHA256SUMS`：上述文件的传输完整性校验；不是额外签名体系。
+- `validated-stack.json`：Tag、source/Runtime SHA、上游baseline、镜像Digest/build date/Actions URL、两插件pin及发布时验收快照。
+- `stack.env`：非秘密的ST_IMAGE Digest值；是否接入某个NAS管理入口需按实际环境确认。
+- `verify-stack.py`：已有只读核验工具，不pull、不checkout、不重启、不修改数据。
+- `SHA256SUMS`：资产传输完整性校验。
 
-GitHub Release资产是该版本具体source SHA/digest的权威记录。仓库清单是构建输入，不在Git提交里伪造尚未产出的digest，也不在发布后为了填digest改同一个Tag。当前配置如有null，只说明证据未提供，不代表通过。正式Production Baseline需在用户GHCR镜像验收后登记其实际Image ID、容器状态与组件SHA；不能把Candidate报告冒充正式镜像验收。
+Release资产是不可变的发行记录，本次不修改Tag/Release、镜像、personal-release.json或资产中的历史pending字段。**发布后的真实部署与验收事实更新在PRODUCTION_BASELINE.json和Release Closeout**，不能因为旧资产写着pending就推断NAS尚未部署，也不能把Candidate passed升级成正式passed。
 
-Tools部署pin仍是已验证`2f6a9c54`；Closeout只把AGENTS canonical link改为release时，Personal stable HEAD会产生文档后继。核验器比较全部Git树（仅排除AGENTS.md），只有生产源码和dist完全相同时才接受该维护提交，并分别输出实际SHA和验证SHA。不得把其他source/config/build改动按“文档提交”豁免。
+Tools部署pin仍为已验证的`2f6a9c54`。已有核验工具仅在全部Git树（只排除AGENTS.md）相同时接受维护后继，并分别输出实际SHA与验证SHA；不能豁免source/config/build改动。本轮没有更新NAS Tools，也没有执行该工具。
 
-## NAS一次配置，以后用版本制品更新
+## 后续NAS更新边界
 
-无需在NAS clone ST或build。首次在已确认的原compose/stack中，将现有ST服务的image改为`${ST_IMAGE:?Select a validated Personal Release}`；保留既有挂载、端口、网络、proxy、user、重启/停止参数和healthcheck，移除该服务的自动build来源。将所选Release的stack.env作为该stack实际使用的环境文件，或在NAS界面image字段直接填写同一digest。不要把`.env`误当容器env_file；ST_IMAGE必须参与Compose变量替换。具体配置位置先根据实际NAS入口确认，不猜路径/服务名，不覆盖现有秘密环境文件。
+当前Compose已经使用正式GHCR Digest。NAS不再常规clone、build或patch Runtime；不跟踪浮动latest，不手改运行文件。每次变更先选已审查的Release与三组件精确SHA，保留原挂载/配置/网络和用户数据；拉取正式Digest、切换对应服务、确认Health/Smoke后再更新Current/Previous及Production Baseline。
 
-以后每次：
+**飞牛OS GUI更新方式尚未最终确认。** 本文不规定按钮、界面路径、环境文件接入方案或一键更新承诺。需要后续单独核实实际管理入口后再固化操作步骤，本轮不设计或执行GUI/Compose操作。
 
-1. 阅读目标Release及Validated Stack，对照当前/Previous和实际插件状态，确认受影响Owner与验收范围。
-2. 下载固定Tag的资产并核验SHA256SUMS。下载路径由用户选择；不执行远端`curl | sh`。
-3. 用NAS现有Compose界面替换版本/digest，执行pull与recreate；不要勾选源码build、全扩展更新、数据卷删除或latest跟踪。
-4. 等待healthy，用核验入口核对digest/source/plugin SHA，然后做短smoke。成功后记录新Current和旧Previous。
-
-可选的一次只读命令（主机已有Python3和Docker即可，无新常驻服务；否则用NAS界面/同样的Docker元数据人工核对）：
+仓库已有的可选只读入口如下，实际是否在NAS使用未在本轮提供；不据此宣称自动/GUI更新已实现：
 
 ```bash
 python3 verify-stack.py --stack validated-stack.json --config nas-paths.json
 ```
 
-`nas-paths.json`仅保存首次确认的container、tools_directory、baibaoku_directory（容器内路径），不包含凭据。Candidate阶段可加`--phase candidate`，这只检查Runtime label，不宣称该镜像匹配正式digest。默认release模式同时要求镜像digest与release commit label匹配；不配置Docker HEALTHCHECK时额外执行镜像自带只读health probe。不要用标签/版本号替代digest和代码证据。
+`nas-paths.json`应只放已确认的容器名和两插件容器内路径，无凭据。默认release模式检查Digest和source label，Candidate模式不证明正式镜像匹配。工具不能证明没有重复安装，也不代替Save Generate/Generate Retry独立开关、自更新、扩展管理接管和模型行为的检查；Extension Manager未使用则无需为了验证强制开启。
 
-核验器还拒绝Core被bind mount遮盖、Tools错误origin/branch/tracking、dirty源码及BaiBaoKu SHA漂移。它不查询Prompt/秘密，不自动修复Git，不更改插件设置，也不能证明没有第二份插件安装；Save Generate off、Generate Retry off、版本自更新关闭、只有一份Tools仍需按UI确认。Extension Manager未使用则不必开启；如使用也不能在冻结验收中拉未来提交。
+本版此前已验证GHCR manifest可匿名读取；未来版本仍按实际包权限检查，不在聊天、Compose或命令参数写PAT。不得以仓库公开推断所有镜像权限。
 
-若GHCR包首次发布默认私有，需一次性将该Personal镜像包设为Public，或由用户在NAS安全配置read:packages认证；不把PAT写进Compose/聊天/命令参数。包的访问状态以实际匿名pull检查为准，不能因GitHub repo公开就宣称镜像可匿名拉取。
+## Current + Previous与恢复边界
 
-## Current + Previous回滚与清理
+以后每次成功升级，记录当前与上一个已验证正式Personal镜像的Digest、Validated Stack、实际插件SHA及相应配置。当前Previous正式Personal版本尚未登记，不把临时Candidate冒充Previous；旧官方1.19.0回滚镜像仍保留，到下一次Personal Release成功后再按Current + Previous规则轮换。
 
-每次成功部署后只维护Current和上一个已验证Previous正式镜像（含其digest/Validated Stack及插件状态）。过渡期额外保留旧官方1.19.0 rollback image，直到下一次Personal Release成功后再按规则轮换。本轮没有删除镜像或NAS目录。
+Runtime故障优先回到上一个已验证镜像，同时确认Tools/BaiBaoKu与该组合一致；插件有漂移时需恢复相应代码/配置，不能只回滚ST留下新Hook/Branch。数据恢复与Runtime回滚分开，不自动覆盖聊天数据。
 
-Runtime故障优先换回Previous镜像；前提是Tools/BaiBaoKu仍与Previous兼容且未漂移，必要时同时恢复旧插件代码/配置。不要因一次Core故障自动恢复旧聊天数据。数据正确性问题先停止写入、保存现场，核对影响后才使用数据备份；不盲目覆盖备份点后新增聊天。
+当前完整目录备份仍保留，Backrest自动备份和恢复验证尚未完成，真实生产数据恢复演练也未进行。因此只登记已有回滚资产，不宣称完整恢复能力已验证；数据正确性事故先停止写入、保留现场，再在独立任务中按已核实恢复点处理。本轮不进行恢复或清理。
 
-只有Final Audit、Merge、Release、正式GHCR重部署及最终health/smoke都通过后，才清理：临时clone/build source、Candidate本地中间镜像、已不再需要的Phase C完整目录临时备份。先列出具体路径/Image ID并确认它们不属于Current/Previous/官方过渡rollback，不执行全局image prune，不用危险通配符删正式目录。Backrest正常备份不属于这些临时清理对象。
+## 保留事项与后续责任
 
-## 当前Closeout状态
+| 现状 | 后续责任与范围 |
+| --- | --- |
+| Candidate镜像和临时目录尚未清理 | 用户在独立NAS清理任务中确认具体资产，不在本轮处理 |
+| 官方1.19.0回滚镜像仍保留 | 用户在下一次Personal Release成功后按Current/Previous规则评估轮换 |
+| 完整目录备份仍保留 | 用户确认恢复保障和保留策略后另行决定；不把现有目录备份写成已验证恢复点 |
+| Backrest自动备份和恢复验证未完成 | 用户在独立备份任务中完善并留验收证据 |
+| 飞牛OS GUI更新方式未最终确认 | 部署维护者与用户后续核实实际入口；不宣称已实现 |
+| 真实生产数据恢复演练未进行 | 用户在独立恢复任务中验证，不在本轮操作真实数据 |
+| 部分Vertex及非Vertex能力未正式验收 | 对应能力变化或确有使用需要时，由维护者/用户补受影响组合验证，不追增本轮开发 |
+| 既有启动日志`listen is enabled but private request filter is disabled`尚未单独评估 | 部署维护者在独立安全审查中判断；本轮只记录，不推断原因/暴露范围或调整配置 |
 
-已发布[v1.19.0-personal.1](https://github.com/SurgeXW0508/SillyTavern/releases/tag/v1.19.0-personal.1)，实际GHCR manifest已验证可匿名读取。结果见[RELEASE_CLOSEOUT.md](RELEASE_CLOSEOUT.md)，当前生产事实见[PRODUCTION_BASELINE.json](PRODUCTION_BASELINE.json)。
+基本部署验收完成不等于备份、GUI、安全和所有可选能力已验收。临时资产保持保留，Production Baseline的cleanup_allowed继续为false；本轮不授权删除任何文件、镜像或备份。
 
-代码与发布体系完成不等于整个Phase C生产Closed。合入、Tag/Release、GHCR与最终NAS验收分别登记：源码和产物结果由GitHub记录；真实NAS由用户提供Image ID、healthy/RestartCount、实际组件SHA、最终smoke后才能更新Production Baseline、允许清理并登记Phase C正式Closed。
+## 本轮文档状态
+
+正式部署与上述基本Smoke结果已按用户提供的NAS输出登记。最终文档从最新release建立独立分支，提交后等待独立审查；本轮不直接合并、不发布、不部署。入口与Owner规则只有一份canonical维护文档，历史部署交接保留作过程记录，不另建操作体系。

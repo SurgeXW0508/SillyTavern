@@ -1,17 +1,31 @@
 {
   "schema_version": 1,
   "updated_at": "2026-11-09",
-  "phase_c_status": "release_published_pending_formal_nas_smoke",
+  "phase_c_status": "formal_ghcr_deployed_basic_smoke_passed",
   "current_production": {
-    "source": "user_report",
+    "source": "user_provided_nas_results_2026-11-09",
+    "repository": "SurgeXW0508/SillyTavern",
+    "release_tag": "v1.19.0-personal.1",
+    "release_source_commit": "1af2180585e5bbe49159bc8884d5c890641f13c3",
     "runtime_commit": "090cbba6d40e5d117ab41a9e6deb20b40e2dc336",
-    "release_tag": null,
-    "image_id": null,
-    "image_digest": null,
-    "container_health": null,
-    "restart_count": null,
-    "tools_sha": null,
-    "baibaoku_sha": null
+    "image_repository": "ghcr.io/surgexw0508/sillytavern-personal",
+    "image_ref": "ghcr.io/surgexw0508/sillytavern-personal@sha256:22973f7169fa694a0894b054e2b754ccf0ea881703d32a011e473c79c87ac740",
+    "image_digest": "sha256:22973f7169fa694a0894b054e2b754ccf0ea881703d32a011e473c79c87ac740",
+    "image_id": "sha256:dfb4f08735296b0b7610e9936cbce707af8d0021ac6d4eaafadc93c074b09e01",
+    "container_name": "sillytavern",
+    "container_health": "healthy",
+    "restart_count": 0,
+    "compose_image_source": "formal_ghcr_digest",
+    "tools_repository": "SurgeXW0508/ST-BaiBai-Tools",
+    "tools_branch": "personal/stable",
+    "tools_sha": "2f6a9c54d2c906b4a0e44d20c12d0712552e393d",
+    "tools_origin_repository": "SurgeXW0508/ST-BaiBai-Tools",
+    "tools_tracking": "origin/personal/stable",
+    "tools_worktree": "clean",
+    "baibaoku_repository": "baibai-git/baibaoku",
+    "baibaoku_version": "0.7.3",
+    "baibaoku_sha": "b211a4e97fdaec24dc8b90c85ddc198fac9ac200",
+    "baibaoku_source": "unmodified_upstream_no_personal_fork"
   },
   "target_release": {
     "tag": "v1.19.0-personal.1",
@@ -21,7 +35,9 @@
     "validated_stack": "https://github.com/SurgeXW0508/SillyTavern/releases/download/v1.19.0-personal.1/validated-stack.json",
     "tools_validated_sha": "2f6a9c54d2c906b4a0e44d20c12d0712552e393d",
     "tools_maintenance_head": "ac1279a7535a424c3dc3b2f7a5b2913783fdf7e8",
-    "baibaoku_sha": "b211a4e97fdaec24dc8b90c85ddc198fac9ac200"
+    "baibaoku_sha": "b211a4e97fdaec24dc8b90c85ddc198fac9ac200",
+    "status": "deployed_as_current_production",
+    "tools_maintenance_head_note": "Repository documentation-only successor; NAS actual SHA remains current_production.tools_sha"
   },
   "candidate_acceptance": {
     "source": "user_report_2026-11-09",
@@ -49,20 +65,112 @@
     "restart_count": null,
     "nas_tools_sha": null,
     "nas_baibaoku_sha": null,
-    "formal_image_nas_smoke": "pending",
-    "production_status": "pending_formal_image_acceptance"
+    "phase": "historical_candidate",
+    "note": "Historical Candidate results and missing Candidate metadata; do not promote these results to formal GHCR acceptance"
   },
   "previous_verified_personal_release": null,
   "bootstrap_rollback": {
     "official_version": "1.19.0",
     "image_id": null,
-    "keep_until": "next_personal_release_successfully_deployed_and_verified"
+    "keep_until": "next_personal_release_successfully_deployed_and_verified",
+    "status": "retained"
   },
   "cleanup_allowed": false,
   "pending": [
-    "record_current_image_id_health_restart_and_actual_plugin_shas",
-    "deploy_formal_ghcr_image_without_changing_data_mounts",
-    "verify_health_and_minimal_model_smoke",
-    "record_current_and_previous_then_review_specific_temporary_assets_for_cleanup"
-  ]
+    {
+      "item": "candidate_images_and_temporary_directories",
+      "status": "not_cleaned",
+      "owner": "user_in_a_separate_nas_cleanup_task"
+    },
+    {
+      "item": "official_1_19_0_rollback_image",
+      "status": "retained",
+      "owner": "user_after_next_personal_release_is_verified"
+    },
+    {
+      "item": "full_directory_backups",
+      "status": "retained",
+      "owner": "user_after_restore_readiness_and_retention_review"
+    },
+    {
+      "item": "backrest_automatic_backup_and_restore_validation",
+      "status": "not_completed",
+      "owner": "user_in_a_separate_backup_task"
+    },
+    {
+      "item": "fnos_gui_update_procedure",
+      "status": "pending_confirmation",
+      "owner": "deployment_maintainer_with_user"
+    },
+    {
+      "item": "production_data_restore_drill",
+      "status": "not_performed",
+      "owner": "user_in_a_separate_restore_task"
+    },
+    {
+      "item": "remaining_formal_vertex_and_non_vertex_checks",
+      "status": "not_verified",
+      "owner": "maintainer_and_user_when_the_capability_is_needed_or_changed"
+    },
+    {
+      "item": "existing_private_request_filter_startup_warning",
+      "status": "not_separately_assessed",
+      "owner": "deployment_maintainer_in_a_separate_security_review"
+    }
+  ],
+  "documentation_closeout": {
+    "status": "pending_independent_review",
+    "scope": "documentation_only",
+    "evidence_source": "user_provided_nas_results_2026-11-09"
+  },
+  "formal_acceptance": {
+    "source": "user_provided_nas_results_2026-11-09",
+    "phase": "formal_ghcr_production",
+    "release_tag": "v1.19.0-personal.1",
+    "image_digest": "sha256:22973f7169fa694a0894b054e2b754ccf0ea881703d32a011e473c79c87ac740",
+    "status": "basic_smoke_passed",
+    "passed": [
+      "container_startup",
+      "container_health",
+      "vertex_rp_text_generation",
+      "refresh_chat_history_persistence"
+    ],
+    "not_verified_in_formal_environment": [
+      "multi_turn",
+      "refresh_then_generate",
+      "stop",
+      "regenerate",
+      "swipe",
+      "continue",
+      "tool_call_real_model",
+      "thinking_signature_multi_turn",
+      "json_non_streaming",
+      "image_input_output",
+      "non_vertex_smoke",
+      "reasoning_edit_persistence",
+      "tokenizer_failure_recovery",
+      "chat_import_collision"
+    ],
+    "note": "Only the listed basic checks were confirmed for the formal image; unverified features are not failures or passes"
+  },
+  "retained_assets": {
+    "candidate_images_and_temporary_directories": "not_cleaned",
+    "full_directory_backups": "retained",
+    "official_1_19_0_rollback_image": "retained"
+  },
+  "backup_readiness": {
+    "backrest_automatic_backup_and_restore_validation": "not_completed",
+    "production_data_restore_drill": "not_performed",
+    "verified_restore_point": null
+  },
+  "nas_update_interface": {
+    "compose": "formal_ghcr_digest_in_use",
+    "fnos_gui_update_procedure": "pending_confirmation"
+  },
+  "security_observation": {
+    "message": "listen is enabled but private request filter is disabled",
+    "source": "user_reported_existing_startup_warning",
+    "assessment": "not_separately_assessed",
+    "owner": "deployment_maintainer_in_a_separate_security_review"
+  }
 }
