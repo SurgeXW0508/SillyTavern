@@ -119,7 +119,7 @@
     "scripts": {
         "init": "node src/server-init.js",
         "start": "node server.js",
-        "test:vertex": "node --test tests/vertex-native.node.mjs tests/vertex-save-generate.node.mjs tests/vertex-plugin-recovery.node.mjs",
+        "test:vertex": "node --test tests/vertex-native.node.mjs tests/vertex-http.node.mjs",
         "debug": "node --inspect server.js",
         "start:global": "node server.js --global",
         "start:electron": "cd ./src/electron && npm run start",

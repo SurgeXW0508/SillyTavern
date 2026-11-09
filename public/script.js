@@ -1,4 +1,4 @@
-import { applyVertexMessageState, vertexResponseRecord } from './scripts/vertex-state.js';
+import { applyVertexMessageState, vertexResponseRecord, isUsableVertexPartial } from './scripts/vertex-state.js';
 import {
     showdown,
     moment,
@@ -3812,7 +3812,7 @@ class StreamingProcessor {
         await this.finalizeIntermediaryMessage(messageId, text, { unlockUI: true });
 
         const isAborted = this.abortController.signal.aborted;
-        if (!isAborted && power_user.auto_swipe && generatedTextFiltered(text)) {
+        if (!isAborted && (!this.vertexMeta || this.vertexMeta.state === 'completed') && power_user.auto_swipe && generatedTextFiltered(text)) {
             return await swipe(null, SWIPE_DIRECTION.RIGHT, { source: SWIPE_SOURCE.AUTO_SWIPE, repeated: true, forceMesId: chat.length - 1 });
         }
         await saveChatConditional();
@@ -5449,9 +5449,10 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
             }
 
             if (isStreamFinished) {
+                const canAutoContinue = !streamingProcessor.vertexMeta || streamingProcessor.vertexMeta.state === 'completed';
                 await streamingProcessor.onFinishStreaming(streamingProcessor.messageId, getMessage);
                 streamingProcessor = null;
-                triggerAutoContinue(messageChunk, isImpersonate);
+                if (canAutoContinue) triggerAutoContinue(messageChunk, isImpersonate);
                 return Object.defineProperties(new String(getMessage), {
                     'messageChunk': { value: messageChunk },
                     'fromStream': { value: true },
@@ -5479,8 +5480,10 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
 
         let messageChunk = '';
 
-        // if an error was returned in data (textgenwebui), show it and throw it
-        if (data.error) {
+        const vertexPartial = isUsableVertexPartial(data);
+        // A usable native partial is a message with an incomplete terminal state.
+        // Empty failures still use the ordinary error path.
+        if (data.error && !vertexPartial) {
             unblockGeneration(type);
 
             if (data?.response) {
@@ -5489,7 +5492,7 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
             throw new Error(data?.response);
         }
 
-        if (jsonSchema) {
+        if (jsonSchema && !vertexPartial) {
             unblockGeneration(type);
             return extractJsonFromData(data, { returnInvalidJson: jsonSchema.returnInvalid ?? false });
         }
@@ -5500,7 +5503,7 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
         let reasoning = extractReasoningFromData(data);
         let imageUrls = extractImagesFromData(data);
         const reasoningSignature = extractReasoningSignatureFromData(data);
-        const vertexResponse = data?.vertexMeta?.contract === 1 ? vertexResponseRecord(data.responseContent?.parts, data.vertexMeta.model || getGeneratingModel(), data.vertexEnvelope) : null;
+        const vertexResponse = data?.vertexMeta ? vertexResponseRecord(data.responseContent?.parts, data.vertexMeta.model || getGeneratingModel(), data.vertexEnvelope) : null;
         kobold_horde_model = title;
 
         const swipes = extractMultiSwipes(data, type);
@@ -5577,7 +5580,7 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
         }
 
         const isAborted = abortController && abortController.signal.aborted;
-        if (!isAborted && power_user.auto_swipe && generatedTextFiltered(getMessage)) {
+        if (!isAborted && (!data.vertexMeta || data.vertexMeta.state === 'completed') && power_user.auto_swipe && generatedTextFiltered(getMessage)) {
             is_send_press = false;
             return await swipe(null, SWIPE_DIRECTION.RIGHT, { source: SWIPE_SOURCE.AUTO_SWIPE, repeated: true, forceMesId: chat.length - 1 });
         }
@@ -5587,7 +5590,7 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
         unblockGeneration(type);
         streamingProcessor = null;
 
-        if (type !== 'quiet') {
+        if (type !== 'quiet' && (!data.vertexMeta || data.vertexMeta.state === 'completed')) {
             triggerAutoContinue(messageChunk, isImpersonate);
         }
 

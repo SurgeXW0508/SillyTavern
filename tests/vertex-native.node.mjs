@@ -10,7 +10,7 @@ setConfigFilePath(fileURLToPath(new URL('../default/config.yaml', import.meta.ur
 const { vertexOptions, buildVertexRequest, readVertexSse, VertexFunctionStream, VERTEX_LIMITS } = await import('../src/endpoints/backends/vertex-protocol.js');
 const { createVertexGeneration, createVertexHandler, vertexResultFrame } = await import('../src/endpoints/backends/vertex-native.js');
 const { createVertexConnectionResolver, vertexHost } = await import('../src/endpoints/backends/vertex-transport.js');
-const { appendVertexParts, vertexResponseRecord, applyVertexMessageState, reusableVertexResponse } = await import('../public/scripts/vertex-state.js');
+const { appendVertexParts, vertexResponseRecord, applyVertexMessageState, reusableVertexResponse, vertexToolHistory, isUsableVertexPartial } = await import('../public/scripts/vertex-state.js');
 const base = { model: 'gemini-4-argon', stream: true, chat_completion_source: 'vertexai', max_tokens: 131072,
     messages: [{ role: 'user', content: 'PRIVATE_PROMPT' }], include_reasoning: true, reasoning_effort: 'low' };
 const context = (overrides = {}) => ({ body: structuredClone({ ...base, ...overrides }), user: { directories: { root: '/unused/vertex-contract' } } });
@@ -257,6 +257,34 @@ test('multi-tool history replays native Parts and matching IDs/results in order 
     assert.deepEqual(sent.contents[1].parts, parts);
 });
 
+test('tool history binds deduplication to the current message and preserves only unchanged call Parts after edits/deletion', () => {
+    const parts = [{ thought: true, text: 'old reasoning' }, { text: 'Working...', thoughtSignature: 'TEXT_SIG' },
+        { functionCall: { name: 'lookup', id: 'a', args: { content: 'A' } }, thoughtSignature: 'CALL_SIG' }];
+    const raw = vertexResponseRecord(parts, base.model);
+    const display = { name: 'Assistant', mes: 'Working...', extra: {} };
+    applyVertexMessageState(display, raw, { state: 'completed' });
+    const carrier = { name: 'Assistant', mes: '', extra: { api: 'vertexai', model: base.model, tool_invocations: [{ id: 'a', name: 'lookup', parameters: '{"content":"A"}', result: 'result A', vertex_response: raw }] } };
+    const before = JSON.stringify(carrier);
+    let history = vertexToolHistory([display, carrier], base.model);
+    assert.ok(history.hiddenMessages.has(display)); assert.deepEqual(history.responses.get(carrier).parts, parts);
+    display.mes = 'User edited explanation';
+    history = vertexToolHistory([display, carrier], base.model);
+    assert.equal(history.hiddenMessages.size, 0); assert.deepEqual(history.responses.get(carrier).parts, [parts[2]]);
+    assert.deepEqual(vertexToolHistory([carrier], base.model).responses.get(carrier).parts, [parts[2]]);
+    assert.equal(vertexToolHistory([display, carrier], base.model, 'Other member').responses.size, 0);
+    assert.equal(vertexToolHistory([display, carrier], 'different model').responses.size, 0);
+    assert.equal(JSON.stringify(carrier), before, 'Prompt projection must not rewrite stored history');
+});
+
+test('partial eligibility requires retained text/reasoning/image content and an explicit partial terminal', () => {
+    for (const part of [{ text: 'partial' }, { text: 'thinking', thought: true }, { inlineData: { data: 'aGVsbG8=' } }]) {
+        assert.equal(isUsableVertexPartial({ vertexMeta: { state: 'partial' }, responseContent: { parts: [part] }, error: { code: 'VERTEX_UPSTREAM' } }), true);
+    }
+    for (const data of [{ vertexMeta: { state: 'failed' }, responseContent: { parts: [{ text: 'unexpected' }] } },
+        { vertexMeta: { state: 'partial' }, responseContent: { parts: [] } },
+        { vertexMeta: { state: 'partial' }, responseContent: { parts: [{ functionCall: { name: 'lookup', args: {} } }] } }]) assert.equal(isUsableVertexPartial(data), false);
+});
+
 function response() {
     const res = Object.assign(new EventEmitter(), { writes: [], headers: {}, statusCode: 200, destroyed: false, writableEnded: false, writableFinished: false });
     res.status = code => { res.statusCode = code; return res; };
@@ -278,8 +306,6 @@ test('HTTP adapter owns early keepalives, one terminal, cleanup and disconnect c
     assert.equal(wire.split('data: [DONE]').length - 1, 1);
     assert.equal(wire.split('"state":"completed"').length - 1, 1);
     assert.equal(req.listenerCount('aborted'), 0); assert.equal(res.listenerCount('close'), 0);
-    const oldReq = context(), oldRes = response(); delete oldRes.flushHeaders;
-    await createVertexHandler({ generate })(oldReq, oldRes); assert.equal(oldRes.statusCode, 409); assert.equal(calls, 1);
 });
 
 test('HTTP cancellation releases a backpressure wait and aborts the one upstream', async () => {

@@ -32,14 +32,14 @@ export function updateVertexRuntime(frame) {
         return;
     }
     if (frame.error) {
-        output.textContent = frame.error.message || 'Vertex 请求失败';
+        output.textContent = `${frame.vertexMeta?.state === 'partial' ? '部分完成 · ' : ''}${frame.error.message || 'Vertex 请求失败'}`;
         return;
     }
     Object.assign(runtime, frame.vertexMeta || {});
     if (frame.usageMetadata?.trafficType) runtime.trafficType = frame.usageMetadata.trafficType;
     if (frame.vertexMeta?.phase === 'completed') runtime.tokens = frame.usageMetadata?.totalTokenCount;
     const phase = { partial: '部分完成', failed: '失败', canceled: '已取消', authentication: '正在认证', waiting_for_vertex: '等待 Vertex', receiving: '接收正文', continuation: '正在续传', completed: '已完成' };
-    if (frame.candidates?.some(c => c.content?.parts?.length)) runtime.phase = 'receiving';
+    if (!frame.vertexMeta?.state && frame.candidates?.some(c => c.content?.parts?.length)) runtime.phase = 'receiving';
     const details = [phase[runtime.phase] || '正在请求'];
     if (runtime.trafficType) details.push(runtime.trafficType);
     if (runtime.segments > 1) details.push(`${runtime.segments} 段`);

@@ -1,12 +1,11 @@
 // Vertex-only generation service and HTTP adapter. Derived from Shalistera 510fbb54.
-// Internal callers use runVertexGeneration: they never manufacture Express objects.
+// Generation owns upstream resources; the HTTP adapter owns the browser connection.
 import fetch from 'node-fetch';
 import { postProcessPrompt, getPromptNames } from '../../prompt-converters.js';
 import { flattenSchema } from '../../util.js';
 import { VertexError, VERTEX_LIMITS, vertexOptions, buildVertexRequest, readVertexSse, VertexFunctionStream } from './vertex-protocol.js';
 import { resolveVertexConnection, readVertexJson, vertexHttpError } from './vertex-transport.js';
 
-export const VERTEX_GENERATION_CONTRACT = 1;
 const usageKeys = ['promptTokenCount', 'candidatesTokenCount', 'thoughtsTokenCount', 'cachedContentTokenCount', 'totalTokenCount', 'toolUsePromptTokenCount'];
 
 function appendParts(target, parts) {
@@ -28,10 +27,10 @@ function publicError(error, timedOut, phase) {
 /**
  * One invocation owns its deadline, upstream streams and terminal result.
  * emit(frame, signal) is awaitable for backpressure. It never receives credentials.
- * The caller owns external cancellation and persistence; disconnect policy belongs to its adapter.
+ * The HTTP adapter supplies browser cancellation and awaits outgoing frame writes.
  */
 export function createVertexGeneration({ fetchImpl = fetch, resolveConnection = resolveVertexConnection } = {}) {
-    return async function runVertexGeneration(context, { emit = async () => {} } = {}) {
+    return async function generateVertex(context, { emit = async () => {} } = {}) {
         const controller = new AbortController();
         const { signal } = controller;
         const cancel = () => controller.abort('caller');
@@ -52,7 +51,7 @@ export function createVertexGeneration({ fetchImpl = fetch, resolveConnection = 
             if (!input.body || typeof input.body !== 'object' || Array.isArray(input.body)) throw new VertexError('VERTEX_CONFIG', 'A request body is required.', 400);
             if (Buffer.byteLength(JSON.stringify(input.body)) > VERTEX_LIMITS.responseBytes) throw new VertexError('VERTEX_REQUEST_LIMIT', 'Vertex request exceeds the safety limit.', 413);
             options = vertexOptions(input.body);
-            // Identical preparation for HTTP and internal jobs, without mutating the caller's settings.
+            // Prepare a request snapshot without mutating the browser's settings.
             if (Array.isArray(input.body.messages) && input.body.custom_prompt_post_processing) input.body.messages = postProcessPrompt(input.body.messages, input.body.custom_prompt_post_processing, getPromptNames(input));
             if (input.body.json_schema?.value) input.body.json_schema.value = flattenSchema(input.body.json_schema.value, 'vertexai');
             const body = buildVertexRequest(input, options);
@@ -65,7 +64,7 @@ export function createVertexGeneration({ fetchImpl = fetch, resolveConnection = 
                 signal.throwIfAborted();
                 if (++segments > 32) throw new VertexError('VERTEX_CONTINUATION_LIMIT', 'Vertex continuation exceeded 32 segments.');
                 phase = segments === 1 ? 'authentication' : 'continuation';
-                await send({ vertexMeta: { contract: VERTEX_GENERATION_CONTRACT, phase, segments, ignoredParameters: options.ignoredParameters } });
+                await send({ vertexMeta: { phase, segments, ignoredParameters: options.ignoredParameters } });
                 const connection = await resolveConnection(input, options, signal);
                 signal.throwIfAborted();
                 phase = 'waiting_for_vertex';
@@ -137,16 +136,14 @@ export function createVertexGeneration({ fetchImpl = fetch, resolveConnection = 
         const reasoning = parts.filter(p => p.thought).map(p => p.text || '').join('');
         const signature = parts.filter(p => !p.functionCall && p.thoughtSignature).at(-1)?.thoughtSignature || null;
         const state = error?.code === 'VERTEX_CANCELLED' ? 'canceled' : error ? (parts.length ? 'partial' : 'failed') : finishReason === 'MAX_TOKENS' ? 'partial' : 'completed';
-        const vertexMeta = { contract: VERTEX_GENERATION_CONTRACT, phase: state, state, model: options?.model, finishReason, segments, elapsedMs: Date.now() - started,
-            ignoredParameters: options?.ignoredParameters || [], warning: finishReason === 'MAX_TOKENS' ? 'Vertex reached the output token limit; this response is partial.' : undefined };
+        const vertexMeta = { phase: state, state, model: options?.model, finishReason, segments, elapsedMs: Date.now() - started,
+            ignoredParameters: options?.ignoredParameters || [], ...(error ? { error } : {}), warning: finishReason === 'MAX_TOKENS' ? 'Vertex reached the output token limit; this response is partial.' : undefined };
         return { state, text, reasoning, signature, responseContent: { role: 'model', parts }, usageMetadata: usage, vertexMeta, error,
             candidate: { ...candidateMetadata, content: { role: 'model', parts }, finishReason },
-            // Other native metadata (grounding, safety ratings, model/response IDs) remains available to internal callers.
+            // Preserve native metadata (grounding, safety ratings, model/response IDs) for the HTTP result.
             metadata: nativeMetadata };
     };
 }
-
-export const runVertexGeneration = createVertexGeneration();
 
 export function vertexResultFrame(result, { stream = false } = {}) {
     const terminal = { vertexMeta: result.vertexMeta, usageMetadata: result.usageMetadata, ...(result.error ? { error: result.error } : {}) };
@@ -156,11 +153,8 @@ export function vertexResultFrame(result, { stream = false } = {}) {
 }
 
 /** Only the HTTP adapter owns Express events, keepalives, response headers and drain. */
-export function createVertexHandler({ generate = runVertexGeneration, heartbeatMs = 10000, drainTimeoutMs = 30000 } = {}) {
+export function createVertexHandler({ generate = createVertexGeneration(), heartbeatMs = 10000, drainTimeoutMs = 30000 } = {}) {
     return async function sendVertexRequest(request, response) {
-        if (typeof request.on !== 'function' || typeof response.flushHeaders !== 'function') {
-            return response.status(409).json({ error: { code: 'VERTEX_INTERNAL_CONTRACT_REQUIRED', message: 'Internal Vertex callers must use generation contract v1; update the Save Generate adapter.' } });
-        }
         const controller = new AbortController();
         const stream = request.body?.stream === true;
         let heartbeat;
@@ -190,7 +184,7 @@ export function createVertexHandler({ generate = runVertexGeneration, heartbeatM
             const result = await generate({ body: request.body, user: request.user, signal: controller.signal }, { emit: async (frame, signal) => {
                 if (!response.headersSent) {
                     response.status(200).set({ 'Content-Type': stream ? 'text/event-stream; charset=utf-8' : 'application/json; charset=utf-8',
-                        'Cache-Control': 'no-store, no-transform', 'X-Accel-Buffering': 'no', 'X-ST-Vertex-Native': String(VERTEX_GENERATION_CONTRACT) });
+                        'Cache-Control': 'no-store, no-transform', 'X-Accel-Buffering': 'no' });
                     response.flushHeaders();
                     await write(stream ? ': vertex-native connected\n\n' : '\n', signal);
                     heartbeat = setInterval(() => {

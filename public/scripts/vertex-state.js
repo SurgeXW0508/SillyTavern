@@ -1,4 +1,9 @@
-// Pure helpers shared by the browser and contract tests. Signatures stay attached to their Parts.
+// Core response/history helpers. Signatures stay attached to their Parts.
+export function isUsableVertexPartial(data) {
+    return data?.vertexMeta?.state === 'partial' && Array.isArray(data.responseContent?.parts)
+        && data.responseContent.parts.some(p => (typeof p.text === 'string' && p.text.length > 0) || p.inlineData?.data);
+}
+
 export function appendVertexParts(target, parts) {
     for (const part of parts || []) {
         const previous = target.at(-1);
@@ -44,4 +49,33 @@ export function vertexToolResponse(invocations, model) {
         return i.name === c.name && (!c.id || i.id === c.id) && JSON.stringify(args) === JSON.stringify(c.args);
     });
     return same ? structuredClone(record) : null;
+}
+
+/** Only hide a display message when it still represents the exact native turn. */
+export function vertexToolHistory(chat, model, groupMember = null) {
+    const hiddenMessages = new Set(), responses = new Map(), displaysById = new Map();
+    const eligible = m => m.extra?.api === 'vertexai' && m.extra?.model === model && (!groupMember || m.name === groupMember);
+    for (const message of chat) {
+        const id = message.extra?.vertex_response?.id;
+        if (!id || message.extra?.tool_invocations) continue;
+        if (!displaysById.has(id)) displaysById.set(id, []);
+        displaysById.get(id).push(message);
+    }
+    for (const message of chat) {
+        if (!eligible(message)) continue;
+        const response = vertexToolResponse(message.extra?.tool_invocations, model);
+        if (!response) continue;
+        const displays = displaysById.get(response.id) || [];
+        const display = displays.length === 1 ? displays[0] : null;
+        const current = display && eligible(display) ? reusableVertexResponse(display, model) : null;
+        if (current && JSON.stringify(current.parts) === JSON.stringify(response.parts)) {
+            hiddenMessages.add(display);
+        } else {
+            // Edited/deleted/regex-transformed text belongs to the visible history.
+            // Only unchanged function Parts (including their own signatures) survive.
+            response.parts = response.parts.filter(p => p.functionCall);
+        }
+        responses.set(message, response);
+    }
+    return { hiddenMessages, responses };
 }

@@ -83,5 +83,5 @@ jobs:
       - name: Run unit tests
         run: npm run test:unit --prefix tests
 
-      - name: Run native Vertex contract tests
+      - name: Run native Vertex core tests
         run: npm run test:vertex
