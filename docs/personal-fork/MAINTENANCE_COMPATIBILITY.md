@@ -30,7 +30,9 @@ Canonical compatibility document。涉及ST、Personal Fork、柏宝箱、柏宝
 | 独立体验UI | 柏宝箱 | 未在本轮重新审查 | 不得获得Vertex生成生命周期所有权 |
 | 独立数据库/服务 | 柏宝库 | 未在本轮重新审查 | 保持原版；不能凭服务存在推断已启用Save Generate |
 | Fast Chat / Character Cache / Early Bridge | Pending Ownership Review | 多方 | R2/R3/R4后置，不提前选Owner |
-| Tokenizer、其他渲染/缓存优化 | Pending Ownership Review | 多方 | 不在Phase C扩展范围 |
+| Token Count失败结算 / Tokenizer资源初始化 | ST | 柏宝性能Bridge另行审查 | 本轮仅修Core生命周期；不引入缓存或批量Bridge |
+| Reasoning初始化 / 编辑与基础Chat导入 | ST | — | Handler单次装配；导入只创建新文件 |
+| Tokenizer性能、其他渲染/缓存优化 | Pending Ownership Review | 多方 | 不扩大Phase C；资源初始化正确性不等于性能能力归属 |
 
 ## Disabled Features
 
@@ -40,7 +42,7 @@ Canonical compatibility document。涉及ST、Personal Fork、柏宝箱、柏宝
 
 | Component | Source / branch | 精确验证基线 |
 | --- | --- | --- |
-| Personal ST运行代码 | `SurgeXW0508/SillyTavern:stage/vertex-native-generation-contract` | `24cc9c9559382998afd3b2b2c3e95589df78aa75`；Phase C-B仅更新文档，运行代码不变 |
+| Personal ST运行代码 | `SurgeXW0508/SillyTavern:stage/vertex-native-generation-contract` | 本文件所在Phase C-D提交（运行修复与本文同提交）；输入基线`6f3479d3e33dbfc890e7aef4ce4e9b90c0ae65c2`；精确交付SHA见Git提交及C-D交付记录 |
 | 柏宝箱上游同步基线 | `baibai-git/ST-BaiBai-Tools:main` → `SurgeXW0508/ST-BaiBai-Tools:main` | `1e87dfaad87819a90d8032530a62a2ed29f97aea`，实际package/manifest版本1.1.5 |
 | 柏宝箱唯一个人部署分支 | `SurgeXW0508/ST-BaiBai-Tools:personal/stable` | `2f6a9c54d2c906b4a0e44d20c12d0712552e393d`，跟踪`origin/personal/stable` |
 | 柏宝库 | `baibai-git/baibaoku`原版，无Personal Fork | `b211a4e97fdaec24dc8b90c85ddc198fac9ac200`，0.7.3 |
@@ -78,6 +80,77 @@ Policy：只安装Fork URL与`personal/stable`，保持`origin/personal/stable`�
 Evidence：原生ST扩展安装/分支列表/切换/当前分支更新的真实HTTP+Git验证通过；实际GitHub Fork安装通过。本地受控Git远端同时推进main和stable，Update只拉取stable。完整ST+Personal Tools+原版柏宝库的隔离浏览器验证确认Vertex SSE/JSON各一次上游请求、Save Generate请求为零，旧设置与重载保持关闭；Generate Retry的受控custom请求一次失败后只重试一次。
 
 Scope：不修改ST扩展管理实现、不修改柏宝库、不扩大其他Capability Owner。真实Google和NAS留待下一阶段。
+
+### 2026-11-09 — Phase C-D Core reliability closeout
+
+Decision：只吸收Token Count失败结算、Tokenizer初始化、Reasoning幂等编辑、公共Streaming边界和Chat Import防覆盖。五类能力均由ST Core拥有，脱离柏宝仍成立；不改变性能优化的Pending Owner。
+
+Policy：公共StreamingProcessor结算已收到的正文/Reasoning及消息收尾，Vertex只附加原生Parts/Signature/终态。停止后不调用工具或自动续发；失败不重新派发模型请求，不保留已终结的processor引用。Save Generate继续不装配，两个柏宝仓库和安全/认证/代理实现不变。
+
+Evidence：详见[Phase C-D closeout](PHASE_CD_CLOSEOUT.md)中的命令、边界和验收清单。未进行真实Google或NAS验收，不能把隔离测试当成生产验收。
+
+## Shalistera Adoption Matrix
+
+参考固定到`Shalistera/SillyTavern:release@f67e000034a130dc25c7fb7571b5731f4c219f89`。共同基线为`06bde939fb1e9c4c8d8641d810f0a916b5bce127`，相差31提交。它比1.19.0 tag `7e8663cd9c184a550b37238218bdd32c6efc68e9`多一项npm发布workflow修复，因此最初按tag统计的32提交不是遗漏。
+
+`Adopt Now`表示本轮已实现，不是待办；混合提交只采用Reason栏明确限定的部分。没有整体merge/cherry-pick。宏观分类按实际diff的功能范围完成，不宣称对未采用模块逐行审计。
+
+| SH Capability | Status | Owner | Reason |
+| --- | --- | --- | --- |
+| Vertex Native、工具和原生元数据 | Adopted（adapted） | ST | Phase C已有独立协议/传输/生成/HTTP和编辑历史语义；诊断不采用 |
+| Token count failure settlement | Adopt Now | ST | HTTP/网络失败结算已有fallback；计数选择/预算不变 |
+| Tokenizer init lifecycle | Adopt Now | ST | 共享pending、只发布ready实例、失败释放且后续可重试 |
+| Reasoning edit guard | Adopt Now | ST | 设置刷新与装配分离，旧按钮不重复处理 |
+| Generic streaming pending content | Adopt Now（部分Already Covered） | ST | 原有Vertex partial和正文tool收尾已覆盖；补公共错误、reasoning-only工具、Stop工具保护和终态引用释放 |
+| Chat import collision / CAI histories | Adopt Now（仅导入） | ST | 唯一名与排他创建；不带入summary/search/cache |
+| Custom model IDs | Intentional Omission | ST optional | 当前选择器与请求链已可使用`gemini-4-argon`；仅验证现有代码路径，不断言NAS实际目标/权限 |
+| Indexed span semantics | Already Covered | ST | 官方基线仍按下标访问；未采用引入iterator差异的SH span优化 |
+| Chat search isolation / chat & character caches / long-chat optimizations | Pending Ownership Review | TBD | 与柏宝搜索/缓存/长聊天有交叉，不能建立双实现 |
+| 其他render/cache/scan/UI/build性能、诊断和benchmark | Intentional Omission或下表Pending | — / TBD | 当前不以性能换长期diff，不把合成benchmark当实机收益 |
+
+31提交完整索引（短SHA链接到精确来源）：
+
+| SH commit | 主要范围 | Status | 取舍 / Owner |
+| --- | --- | --- | --- |
+| [510fbb54](https://github.com/Shalistera/SillyTavern/commit/510fbb545f3c713c869e86fff106b3d1a830ce63) | Vertex与诊断 | Adopted | Vertex由ST适配保留；诊断不引入 |
+| [01b87c88](https://github.com/Shalistera/SillyTavern/commit/01b87c88d08206ea056e622e955642c159f72f4c) | 消息/Reasoning深度与fade | Intentional Omission | 性能和渲染diff；不采用 |
+| [b34249a6](https://github.com/Shalistera/SillyTavern/commit/b34249a6c81e4cbffbb8cff6f45f32243c2ad2a1) | Markdown / WI / Chat Search | Pending Ownership Review | 搜索Owner未定；Markdown缓存不采用 |
+| [b1ae6199](https://github.com/Shalistera/SillyTavern/commit/b1ae6199d44b9c0626552a7e00ac4d99ef618eea) | Chat summaries与Import | Adopt Now | 仅CAI转换和导入防覆盖；缓存/搜索待Owner |
+| [6360ee2c](https://github.com/Shalistera/SillyTavern/commit/6360ee2ce883411eb5bbe94a3be3c962ee846329) | stale search / Markdown / template | Pending Ownership Review | 不碰R2/搜索；其他缓存与去重优化不采用 |
+| [097be538](https://github.com/Shalistera/SillyTavern/commit/097be5384c3a947b0d809b9d06845ff10a88578a) | Reasoning编辑/初始化 | Adopt Now | ST；不增加第二套Reasoning状态 |
+| [3ef63e86](https://github.com/Shalistera/SillyTavern/commit/3ef63e86c43a3c2637ec70fb972e09c0d93293c9) | 模型/性能文档与测试 | Intentional Omission | 非运行时依赖；使用个人验证文档 |
+| [78a22e87](https://github.com/Shalistera/SillyTavern/commit/78a22e873a0ebc81db9df68c33855e040f1bb559) | 跨API自定义模型ID | Intentional Omission | 可选功能；当前目标ID链路已有 |
+| [69c6f626](https://github.com/Shalistera/SillyTavern/commit/69c6f6261b82429411ecfea7550bd5e949f7eb50) | Chat byte scan / Search summaries | Pending Ownership Review | 文件/搜索缓存Owner未定 |
+| [195035e5](https://github.com/Shalistera/SillyTavern/commit/195035e5757f9dc7e7309e2739675ed7bd3bb5b4) | 角色元数据缓存 | Pending Ownership Review | R3与柏宝角色缓存后置 |
+| [f5d33ce1](https://github.com/Shalistera/SillyTavern/commit/f5d33ce1d683c9cce1f4594c35fa45878f98c63b) | Tag / Keyboard初始化性能 | Intentional Omission | 未确认当前数据正确性阻断 |
+| [0ca7ceac](https://github.com/Shalistera/SillyTavern/commit/0ca7ceacdde9629e588c2ce9e062744c10d6ff60) | Avatar fallback listener | Intentional Omission | 局部DOM优化；不扩展本轮事件范围 |
+| [80898271](https://github.com/Shalistera/SillyTavern/commit/80898271ecbd20d1e2e1a2c688933c85009c747f) | Span / Fade性能 | Intentional Omission | 不引入渲染实现与其依赖 |
+| [882b344f](https://github.com/Shalistera/SillyTavern/commit/882b344f4da67ab5f51b625c4021fa1e02e51d1e) | Streaming panel Markdown复用 | Intentional Omission | 显示缓存收益不抵长期diff |
+| [f9404623](https://github.com/Shalistera/SillyTavern/commit/f940462387b9aafeb95d16ac2f1c3a3751f995de) | Media load listener清理 | Intentional Omission | 未发现当前数据损坏；媒体滚动生命周期优化暂不引入 |
+| [93eb4a29](https://github.com/Shalistera/SillyTavern/commit/93eb4a29889bec8bcf6823654bf01833c3ac98b8) | 性能与cache-miss基准 | Intentional Omission | 文档/benchmark，不是Core运行依赖 |
+| [bebe62bd](https://github.com/Shalistera/SillyTavern/commit/bebe62bdad8362f4b1c85e7c065ba48b58b3d2cc) | Span indexed语义 | Already Covered | 官方下标语义仍在；无需带入优化后修复 |
+| [234cb02d](https://github.com/Shalistera/SillyTavern/commit/234cb02d2538728fc96c0d64bbbfed2c50619c64) | WI / Persona search | Pending Ownership Review | 搜索优化与柏宝交叉，未选Owner |
+| [cfc09c41](https://github.com/Shalistera/SillyTavern/commit/cfc09c41ba55a56e54e0888506313c715b848afc) | Folder索引 | Intentional Omission | 列表性能，无当前必要性 |
+| [a659d219](https://github.com/Shalistera/SillyTavern/commit/a659d219d81cc5084aa0d6d8c1e8d37c1b76cb49) | Group引用索引 / stat复用 | Intentional Omission | 列表性能，不引入索引状态 |
+| [c8147274](https://github.com/Shalistera/SillyTavern/commit/c8147274b34b281d204fa9887d9048b0431abfa6) | Webpack build cache | Intentional Omission | 构建优化非运行必要依赖 |
+| [a3bb450d](https://github.com/Shalistera/SillyTavern/commit/a3bb450d400b20280566de938ba0f451cabb7dc1) | Macro fast path | Intentional Omission | Prompt宏语义保持上游实现 |
+| [46c47c5b](https://github.com/Shalistera/SillyTavern/commit/46c47c5b015bfe90ec582d2a2597b97257ff979b) | Token Count failure | Adopt Now | ST；已有fallback必须结算 |
+| [f84b0a1f](https://github.com/Shalistera/SillyTavern/commit/f84b0a1ffbc986b8e04f71d813a6c6fa835a1a0e) | Thumbnail header读取 | Intentional Omission | IO优化，不改图片路径 |
+| [b35c996c](https://github.com/Shalistera/SillyTavern/commit/b35c996c81cd878e277944bc10f1c367ee129083) | Hidden preview / 大数组替换 | Pending Ownership Review | 长聊天Owner后置；不引入throttle；极大历史参数上限未在当前环境复现/验收 |
+| [b0f25818](https://github.com/Shalistera/SillyTavern/commit/b0f25818429becd3518b943fd7d5399d3d452f63) | 并行Template初始化 | Intentional Omission | 启动性能，不改顺序 |
+| [fa16e070](https://github.com/Shalistera/SillyTavern/commit/fa16e070a67a57fc4e5be1cc8c5c0f374f3cedfa) | 持久化Chat token cache | Pending Ownership Review | Tokenizer性能Owner未定；本轮仅资源初始化 |
+| [b82c3547](https://github.com/Shalistera/SillyTavern/commit/b82c35477a9f2dbf9dcf07e46f88efae4accf045) | Tokenizer init生命周期 | Adopt Now | ST；single-flight、ready发布、失败可重试 |
+| [897eb6cb](https://github.com/Shalistera/SillyTavern/commit/897eb6cb4dd985feed8bb1b26534ba4530c9585d) | 浏览器/服务端性能文档 | Intentional Omission | 不引入性能benchmark体系 |
+| [63822f73](https://github.com/Shalistera/SillyTavern/commit/63822f73639d2945b0d1720df66effefb25282b0) | Streaming工具/失败/停止 | Adopt Now | 公共生命周期适配；已有Vertex收尾不再建立副本 |
+| [f67e0000](https://github.com/Shalistera/SillyTavern/commit/f67e000034a130dc25c7fb7571b5731f4c219f89) | CPU与调度争用测量 | Intentional Omission | benchmark准确性改进，无运行依赖 |
+
+本轮五项修复的实现/测试可以独立于未采用的性能提交存在。`bebe62bd`仅是未采用span优化后的修正，不构成必须追加前序优化的理由。`b35c996c`的大数组替换另有极大历史输入的可用性价值，但本轮未确认当前真实数据触及参数数量上限；不把它与pending-content修复捆绑。出现实机数据正确性问题时按下述重新开发门槛处理。
+
+## Phase C Code Freeze
+
+**当前状态：Phase C-D开发完成的独立审查候选；正式Code Freeze待独立审查通过。** 不能由Work自审替代独立审查。通过后将状态明确登记为`Phase C Code Freeze`，固定最终三组件精确SHA，随后进入真实Google与隔离NAS/真实酒馆Candidate验收。
+
+冻结后，不再因为SH尚有优化、benchmark更快或顺手重构修改Candidate。只允许真实验收P1、安全问题或数据正确性问题触发重新开发；必须记录复现、Owner、影响面和受影响测试，再提交新的候选。其余Pending项是未来独立阶段，不能作为持续增加当前Phase C diff的理由。
 
 ## Update Preflight（合并/发布前必须完成）
 

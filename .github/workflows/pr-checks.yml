@@ -85,3 +85,6 @@ jobs:
 
       - name: Run native Vertex core tests
         run: npm run test:vertex
+
+      - name: Run Core reliability tests
+        run: npm run test:reliability

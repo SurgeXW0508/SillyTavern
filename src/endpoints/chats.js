@@ -6,7 +6,6 @@ import process from 'node:process';
 
 import express from 'express';
 import sanitize from 'sanitize-filename';
-import { sync as writeFileAtomicSync } from 'write-file-atomic';
 import _ from 'lodash';
 
 import validateAvatarUrlMiddleware from '../middleware/validateFileName.js';
@@ -22,6 +21,7 @@ import {
     tryDeleteFile,
     readFirstLine,
     isPathUnderParent,
+    getUniqueName,
 } from '../util.js';
 
 const isBackupEnabled = !!getConfigValue('backups.chat.enabled', true, 'boolean');
@@ -222,8 +222,7 @@ function importCAIChat(userName, characterName, jsonData) {
         return [starter, ...historyData];
     }
 
-    const newChats = (jsonData.histories.histories ?? []).map(history => newChats.push(convert(history).map(obj => JSON.stringify(obj)).join('\n')));
-    return newChats;
+    return (jsonData.histories.histories ?? []).map(history => convert(history).map(obj => JSON.stringify(obj)).join('\n'));
 }
 
 /**
@@ -756,10 +755,12 @@ router.post('/group/import', function (request, response) {
             return response.sendStatus(400);
         }
 
-        const chatname = humanizedDateTime();
+        const chatname = getUniqueName(humanizedDateTime(),
+            name => fs.existsSync(path.join(request.user.directories.groupChats, `${name}.jsonl`)), { startIndex: 0 });
+        if (chatname === null) throw new Error('Could not find an unused filename for the imported group chat.');
         const pathToUpload = path.join(filedata.destination, filedata.filename);
         const pathToNewFile = path.join(request.user.directories.groupChats, `${chatname}.jsonl`);
-        fs.copyFileSync(pathToUpload, pathToNewFile);
+        fs.copyFileSync(pathToUpload, pathToNewFile, fs.constants.COPYFILE_EXCL);
         fs.unlinkSync(pathToUpload);
         return response.send({ res: chatname });
     } catch (error) {
@@ -785,6 +786,14 @@ router.post('/import', validateAvatarUrlMiddleware, function (request, response)
     if (!isPathUnderParent(request.user.directories.chats, directoryPath)) {
         return response.sendStatus(400);
     }
+
+    // Imported histories never replace an existing file, including races after name selection.
+    const getImportFileName = () => {
+        const name = getUniqueName(`${characterName} - ${humanizedDateTime()} imported`,
+            name => fs.existsSync(path.join(directoryPath, `${name}.jsonl`)), { startIndex: 0 });
+        if (name === null) throw new Error('Could not find an unused filename for the imported chat.');
+        return `${name}.jsonl`;
+    };
 
     try {
         const pathToUpload = path.join(request.file.destination, request.file.filename);
@@ -813,10 +822,10 @@ router.post('/import', validateAvatarUrlMiddleware, function (request, response)
             }
 
             const handleChat = (chat) => {
-                const fileName = `${characterName} - ${humanizedDateTime()} imported.jsonl`;
+                const fileName = getImportFileName();
                 const filePath = path.join(directoryPath, fileName);
                 fileNames.push(fileName);
-                writeFileAtomicSync(filePath, chat, 'utf8');
+                fs.writeFileSync(filePath, chat, { encoding: 'utf8', flag: 'wx' });
             };
 
             const chat = importFunc(userName, characterName, jsonData);
@@ -852,13 +861,13 @@ router.post('/import', validateAvatarUrlMiddleware, function (request, response)
                 console.warn('Failed to flatten Chub Chat data: ', error);
             }
 
-            const fileName = `${characterName} - ${humanizedDateTime()} imported.jsonl`;
+            const fileName = getImportFileName();
             const filePath = path.join(directoryPath, fileName);
             fileNames.push(fileName);
             if (flattenedChat !== data) {
-                writeFileAtomicSync(filePath, flattenedChat, 'utf8');
+                fs.writeFileSync(filePath, flattenedChat, { encoding: 'utf8', flag: 'wx' });
             } else {
-                fs.copyFileSync(pathToUpload, filePath);
+                fs.copyFileSync(pathToUpload, filePath, fs.constants.COPYFILE_EXCL);
             }
             fs.unlinkSync(pathToUpload);
             response.send({ res: true, fileNames });

@@ -3752,9 +3752,10 @@ class StreamingProcessor {
      * @param {string} text - The message text.
      * @param {Object} options - Additional options for finalization.
      * @param {boolean} options.unlockUI - Whether to unlock the generation UI.
+     * @param {boolean} options.updatePreview - Whether the final preview still needs rendering.
      */
-    async finalizeIntermediaryMessage(messageId, text, { unlockUI = true }) {
-        await this.onProgressStreaming(messageId, text, true);
+    async finalizeIntermediaryMessage(messageId, text, { unlockUI = true, updatePreview = true }) {
+        if (updatePreview) await this.onProgressStreaming(messageId, text, true);
         const messageElement = chatElement.find(`.mes[mesid="${messageId}"]`);
         const message = chat[messageId];
         addCopyToCodeBlocks(messageElement);
@@ -3873,6 +3874,8 @@ class StreamingProcessor {
         const isContinue = this.type == 'continue';
         this.stoppingStrings = getStoppingStrings(isImpersonate, isContinue, main_api);
 
+        let pendingPreview = false;
+        let previewFailed = false;
         try {
             const sw = new Stopwatch(1000 / power_user.streaming_fps);
             const timestamps = [];
@@ -3898,8 +3901,17 @@ class StreamingProcessor {
                 this.reasoningSignature = state?.signature ?? null;
                 this.vertexResponse = state?.vertexResponse ?? null;
                 this.vertexMeta = state?.vertexMeta ?? null;
+                pendingPreview = true;
                 await eventSource.emit(event_types.STREAM_TOKEN_RECEIVED, text);
-                await sw.tick(async () => await this.onProgressStreaming(this.messageId, this.continueMessage + text));
+                await sw.tick(async () => {
+                    pendingPreview = false;
+                    try {
+                        await this.onProgressStreaming(this.messageId, this.continueMessage + text);
+                    } catch (error) {
+                        previewFailed = true;
+                        throw error;
+                    }
+                });
             }
             const seconds = (timestamps[timestamps.length - 1] - timestamps[0]) / 1000;
             console.warn(`Stream stats: ${timestamps.length} tokens, ${seconds.toFixed(2)} seconds, rate: ${Number(timestamps.length / seconds).toFixed(2)} TPS`);
@@ -3907,10 +3919,29 @@ class StreamingProcessor {
             // in the case of a self-inflicted abort, we have already cleaned up
             if (!this.isFinished) {
                 console.error(err);
-                this.onErrorStreaming({ emitEvents: !this.vertexResponse });
-                if (this.vertexResponse && this.type !== 'impersonate' && chat[this.messageId]) {
+                if (pendingPreview) {
+                    try {
+                        pendingPreview = false;
+                        await this.onProgressStreaming(this.messageId, this.continueMessage + this.result, true);
+                    } catch (previewError) {
+                        previewFailed = true;
+                        console.error('Failed to render the last received stream content:', previewError);
+                    }
+                }
+                if (this.vertexResponse) {
                     this.vertexMeta = { ...this.vertexMeta, state: this.vertexMeta?.state || 'partial', phase: this.vertexMeta?.state || 'partial' };
-                    await this.finalizeIntermediaryMessage(this.messageId, this.continueMessage + this.result, { unlockUI: true });
+                }
+                // All providers settle pending content through the same message lifecycle.
+                // Never retry a renderer that already threw while processing that content.
+                const hasContent = this.result || this.reasoningHandler.reasoning || this.images.length || this.vertexResponse;
+                const hasMessage = hasContent && this.type !== 'impersonate' && chat[this.messageId];
+                this.onErrorStreaming({ emitEvents: previewFailed || !hasMessage });
+                if (hasMessage) {
+                    if (!previewFailed) {
+                        await this.finalizeIntermediaryMessage(this.messageId, this.continueMessage + this.result, { unlockUI: true, updatePreview: false });
+                    } else if (this.vertexResponse) {
+                        applyVertexMessageState(chat[this.messageId], this.vertexResponse, this.vertexMeta, this.type === 'continue' ? this.continueMessage : '');
+                    }
                     await saveChatConditional();
                 }
             }
@@ -5418,10 +5449,11 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
 
             const isStreamFinished = streamingProcessor && !streamingProcessor.isStopped && streamingProcessor.isFinished;
             const isStreamWithToolCalls = streamingProcessor && Array.isArray(streamingProcessor.toolCalls) && streamingProcessor.toolCalls.length;
-            if (canPerformToolCalls && isStreamFinished && isStreamWithToolCalls && (!streamingProcessor.vertexMeta || streamingProcessor.vertexMeta.state === 'completed')) {
+            if (canPerformToolCalls && isStreamFinished && isStreamWithToolCalls && !streamingProcessor.abortController.signal.aborted && (!streamingProcessor.vertexMeta || streamingProcessor.vertexMeta.state === 'completed')) {
                 const lastMessage = chat[chat.length - 1];
                 const hasToolCalls = ToolManager.hasToolCalls(streamingProcessor.toolCalls);
-                const shouldDeleteMessage = type !== 'swipe' && ['', '...'].includes(lastMessage?.mes) && !lastMessage?.extra?.reasoning && ['', '...'].includes(streamingProcessor?.result);
+                const hasReasoning = lastMessage?.extra?.reasoning || streamingProcessor.reasoningHandler.reasoning;
+                const shouldDeleteMessage = type !== 'swipe' && ['', '...'].includes(lastMessage?.mes) && !hasReasoning && ['', '...'].includes(streamingProcessor?.result);
                 hasToolCalls && shouldDeleteMessage && await deleteLastMessage();
                 if (hasToolCalls && !shouldDeleteMessage) {
                     await streamingProcessor.finalizeIntermediaryMessage(streamingProcessor.messageId, getMessage, { unlockUI: false });
@@ -5449,7 +5481,7 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
             }
 
             if (isStreamFinished) {
-                const canAutoContinue = !streamingProcessor.vertexMeta || streamingProcessor.vertexMeta.state === 'completed';
+                const canAutoContinue = !streamingProcessor.abortController.signal.aborted && (!streamingProcessor.vertexMeta || streamingProcessor.vertexMeta.state === 'completed');
                 await streamingProcessor.onFinishStreaming(streamingProcessor.messageId, getMessage);
                 streamingProcessor = null;
                 if (canAutoContinue) triggerAutoContinue(messageChunk, isImpersonate);
@@ -5458,6 +5490,9 @@ export async function Generate(type, { automatic_trigger, force_name2, quiet_pro
                     'fromStream': { value: true },
                 });
             }
+            // Failed streams settled their partial message in generate(). Release
+            // the terminal processor just as the successful and stopped paths do.
+            streamingProcessor = null;
         } else {
             return await sendGenerationRequest(type, generate_data, { jsonSchema });
         }
