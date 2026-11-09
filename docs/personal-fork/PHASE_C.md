@@ -4,6 +4,8 @@
 
 本报告替代第一轮三方兼容交付的设计结论；历史提交及独立审查报告仍作为过程证据，不作为当前安装方案。
 
+后续维护模型已由Phase C-B转为柏宝箱Fork的`personal/stable`。本报告中外部patch及其1.1.2基线是历史过程，当前安装/更新方式与精确组合以[canonical维护文档](MAINTENANCE_COMPATIBILITY.md)为准，不再应用部署patch。
+
 ## 最终架构与Owner
 
 **Vertex生成生命周期由ST Core独立拥有。** 不再通过柏宝箱接管、柏宝库后台任务及柏宝箱恢复来完成Vertex生成。
