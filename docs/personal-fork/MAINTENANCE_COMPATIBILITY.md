@@ -1,6 +1,6 @@
 # Personal Fork 维护与能力归属
 
-Canonical compatibility document。涉及ST、Personal Fork、柏宝箱、柏宝库、Shalistera引入的任务，开始前必须阅读本文件，完成Capability Ownership Review；其他任务书或未来插件Fork只引用本文件，不复制冲突矩阵。
+Canonical compatibility document。当前正式制品为[v1.19.0-personal.1](https://github.com/SurgeXW0508/SillyTavern/releases/tag/v1.19.0-personal.1)；生产事实与待补项见[PRODUCTION_BASELINE.json](PRODUCTION_BASELINE.json)。涉及ST、Personal Fork、柏宝箱、柏宝库、Shalistera引入的任务，开始前必须阅读本文件，完成Capability Ownership Review；其他任务书或未来插件Fork只引用本文件，不复制冲突矩阵。
 
 ## 稳定维护原则
 
@@ -42,9 +42,9 @@ Canonical compatibility document。涉及ST、Personal Fork、柏宝箱、柏宝
 
 | Component | Source / branch | 精确验证基线 |
 | --- | --- | --- |
-| Personal ST运行代码 | `SurgeXW0508/SillyTavern:stage/vertex-native-generation-contract` | `090cbba6d40e5d117ab41a9e6deb20b40e2dc336`；Phase C冻结运行基线；之后的C-E0提交仅修改文档 |
+| Personal ST运行代码 | `SurgeXW0508/SillyTavern:release`（冻结Runtime） | `090cbba6d40e5d117ab41a9e6deb20b40e2dc336`；Phase C冻结运行基线；之后的C-E0提交仅修改文档 |
 | 柏宝箱上游同步基线 | `baibai-git/ST-BaiBai-Tools:main` → `SurgeXW0508/ST-BaiBai-Tools:main` | `1e87dfaad87819a90d8032530a62a2ed29f97aea`，实际package/manifest版本1.1.5 |
-| 柏宝箱唯一个人部署分支 | `SurgeXW0508/ST-BaiBai-Tools:personal/stable` | `2f6a9c54d2c906b4a0e44d20c12d0712552e393d`，跟踪`origin/personal/stable` |
+| 柏宝箱唯一个人部署分支 | `SurgeXW0508/ST-BaiBai-Tools:personal/stable` | `2f6a9c54d2c906b4a0e44d20c12d0712552e393d`为验证Runtime；维护HEAD `ac1279a7535a424c3dc3b2f7a5b2913783fdf7e8`仅AGENTS链接，源码/dist相同；跟踪`origin/personal/stable` |
 | 柏宝库 | `baibai-git/baibaoku`原版，无Personal Fork | `b211a4e97fdaec24dc8b90c85ddc198fac9ac200`，0.7.3 |
 
 这些是隔离验证组合，不是NAS安装版本断言。柏宝箱个人差异只有Save Generate生命周期关闭策略、对应构建/测试和简短维护入口；没有Vertex Adapter，也没有其他柏宝优化修改。
@@ -152,7 +152,7 @@ Evidence：详见[Phase C-D closeout](PHASE_CD_CLOSEOUT.md)中的命令、边界
 
 | Frozen component | Branch / source | 精确SHA |
 | --- | --- | --- |
-| Personal ST Runtime | `SurgeXW0508/SillyTavern:stage/vertex-native-generation-contract` | `090cbba6d40e5d117ab41a9e6deb20b40e2dc336` |
+| Personal ST Runtime | `SurgeXW0508/SillyTavern:release`（冻结Runtime） | `090cbba6d40e5d117ab41a9e6deb20b40e2dc336` |
 | Personal ST-BaiBai-Tools | `SurgeXW0508/ST-BaiBai-Tools:personal/stable` | `2f6a9c54d2c906b4a0e44d20c12d0712552e393d` |
 | BaiBaoKu原版0.7.3 | `baibai-git/baibaoku` | `b211a4e97fdaec24dc8b90c85ddc198fac9ac200` |
 
@@ -160,7 +160,7 @@ C-E0只登记和交接文档；Stage HEAD可以因此前进。C-E0本地Candidat
 
 冻结后仅以下情况允许重新开发：真实验收发现P1、安全问题、数据正确性问题。必须记录复现、Owner、影响面和受影响测试，再提交新的候选。Shalistera性能优化、benchmark更快、顺手重构、UI小优化和Pending Ownership尚未处理均不能解除冻结。
 
-真实NAS首次检查、构建、迁移、回滚和验收见[Phase C Deployment Handoff](PHASE_C_DEPLOYMENT_HANDOFF.md)。本轮不SSH、不构建/切换正式NAS、不合并release、不Tag/Release。柏宝箱AGENTS暂保留当前Stage canonical链接；最终Closeout合入release并确认文档存在后必须切换到release，不提前建立第二份矩阵。
+C-E0首次手工Candidate过程保留在[历史交接](PHASE_C_DEPLOYMENT_HANDOFF.md)。本次Final Closeout已通过审查和CI，快进合入release并发布v1.19.0-personal.1，Tools AGENTS已切换到release链接。正式镜像与更新/回滚入口见[Personal Release Operations](PERSONAL_RELEASE_OPERATIONS.md)；没有SSH、正式NAS切换或生产清理，也不建立第二份Owner矩阵。
 
 ### 2026-11-09 — Phase C-E0 freeze registration
 
@@ -230,3 +230,11 @@ Final Delta Audit未发现需重开Runtime的P1、安全、数据正确性或Own
 未来优先级：Official security/correctness → Personal Core compatibility → BaiBao compatibility → 用户真实新能力 → UX → performance/optional。升级前先读本文和当前Release的Validated Stack，再做Owner Review、Stage、受影响测试、Release和Deploy。
 
 回滚采用Current + Previous；过渡期旧官方1.19.0保留到下一次Personal Release成功。Runtime回滚与数据恢复分开，插件漂移时不能只退ST。临时备份/clone/image仅在正式GHCR重部署与最终smoke通过后清理。整个Phase C正式Closed仍以最后生产验收/Production Baseline登记为准。
+
+## v1.19.0-personal.1 — 发布结果
+
+正式source commit为`1af2180585e5bbe49159bc8884d5c890641f13c3`，Runtime仍为`090cbba6d40e5d117ab41a9e6deb20b40e2dc336`；之后的发布结果登记仅是文档。Tag不移动、不重建同版本。
+
+Personal Core CI与Personal Release均成功；amd64/arm64镜像已推送，amd64无凭据隔离启动health smoke通过。实际匿名读取GHCR manifest成功，digest为`sha256:22973f7169fa694a0894b054e2b754ccf0ea881703d32a011e473c79c87ac740`，与Release资产一致。
+
+三组件精确验证pin和用户已报告/尚未报告验收范围写入Release的Validated Stack；当前实际NAS元数据仍待补。源代码与发布侧已收口，整个Phase C生产Closed仍等待正式GHCR重部署与最终实机smoke；完成前不清理回滚资产。

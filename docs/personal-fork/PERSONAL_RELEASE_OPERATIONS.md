@@ -61,4 +61,6 @@ Runtime故障优先换回Previous镜像；前提是Tools/BaiBaoKu仍与Previous�
 
 ## 当前Closeout状态
 
+已发布[v1.19.0-personal.1](https://github.com/SurgeXW0508/SillyTavern/releases/tag/v1.19.0-personal.1)，实际GHCR manifest已验证可匿名读取。结果见[RELEASE_CLOSEOUT.md](RELEASE_CLOSEOUT.md)，当前生产事实见[PRODUCTION_BASELINE.json](PRODUCTION_BASELINE.json)。
+
 代码与发布体系完成不等于整个Phase C生产Closed。合入、Tag/Release、GHCR与最终NAS验收分别登记：源码和产物结果由GitHub记录；真实NAS由用户提供Image ID、healthy/RestartCount、实际组件SHA、最终smoke后才能更新Production Baseline、允许清理并登记Phase C正式Closed。

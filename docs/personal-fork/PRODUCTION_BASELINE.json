@@ -1,0 +1,68 @@
+{
+  "schema_version": 1,
+  "updated_at": "2026-11-09",
+  "phase_c_status": "release_published_pending_formal_nas_smoke",
+  "current_production": {
+    "source": "user_report",
+    "runtime_commit": "090cbba6d40e5d117ab41a9e6deb20b40e2dc336",
+    "release_tag": null,
+    "image_id": null,
+    "image_digest": null,
+    "container_health": null,
+    "restart_count": null,
+    "tools_sha": null,
+    "baibaoku_sha": null
+  },
+  "target_release": {
+    "tag": "v1.19.0-personal.1",
+    "source_commit": "1af2180585e5bbe49159bc8884d5c890641f13c3",
+    "runtime_commit": "090cbba6d40e5d117ab41a9e6deb20b40e2dc336",
+    "image_ref": "ghcr.io/surgexw0508/sillytavern-personal@sha256:22973f7169fa694a0894b054e2b754ccf0ea881703d32a011e473c79c87ac740",
+    "validated_stack": "https://github.com/SurgeXW0508/SillyTavern/releases/download/v1.19.0-personal.1/validated-stack.json",
+    "tools_validated_sha": "2f6a9c54d2c906b4a0e44d20c12d0712552e393d",
+    "tools_maintenance_head": "ac1279a7535a424c3dc3b2f7a5b2913783fdf7e8",
+    "baibaoku_sha": "b211a4e97fdaec24dc8b90c85ddc198fac9ac200"
+  },
+  "candidate_acceptance": {
+    "source": "user_report_2026-11-09",
+    "candidate_runtime": "090cbba6d40e5d117ab41a9e6deb20b40e2dc336",
+    "passed": [
+      "vertex_rp",
+      "multi_turn",
+      "refresh_then_generate",
+      "stop",
+      "regenerate"
+    ],
+    "not_reported": [
+      "swipe",
+      "continue",
+      "tool_call_real_model",
+      "non_vertex_smoke",
+      "candidate_image_id",
+      "container_health",
+      "restart_count",
+      "nas_tools_sha",
+      "nas_baibaoku_sha"
+    ],
+    "candidate_image_id": null,
+    "container_health": null,
+    "restart_count": null,
+    "nas_tools_sha": null,
+    "nas_baibaoku_sha": null,
+    "formal_image_nas_smoke": "pending",
+    "production_status": "pending_formal_image_acceptance"
+  },
+  "previous_verified_personal_release": null,
+  "bootstrap_rollback": {
+    "official_version": "1.19.0",
+    "image_id": null,
+    "keep_until": "next_personal_release_successfully_deployed_and_verified"
+  },
+  "cleanup_allowed": false,
+  "pending": [
+    "record_current_image_id_health_restart_and_actual_plugin_shas",
+    "deploy_formal_ghcr_image_without_changing_data_mounts",
+    "verify_health_and_minimal_model_smoke",
+    "record_current_and_previous_then_review_specific_temporary_assets_for_cleanup"
+  ]
+}
