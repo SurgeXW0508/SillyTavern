@@ -6,7 +6,7 @@ Canonical compatibility document。当前正式制品为[v1.19.0-personal.1](htt
 
 先读[Production Baseline](PRODUCTION_BASELINE.json)确认实际部署，再对照本文Owner规则，最后按[Release Operations](PERSONAL_RELEASE_OPERATIONS.md)执行对应更新；正式镜像的实际验收范围见[Release Closeout](RELEASE_CLOSEOUT.md)。无需从历史聊天恢复当前版本。
 
-2026-11-09用户提供的NAS结果：`v1.19.0-personal.1`正式GHCR Digest已部署，容器`sillytavern`为`healthy`、核验时RestartCount为0；NAS Tools实际为`2f6a9c54`且origin为个人Fork、tracking为`origin/personal/stable`、工作区clean；BaiBaoKu为原版`b211a4e9`/0.7.3。完整SHA、Digest和实际Image ID以Production Baseline为准。
+2026-11-12用户提供的NAS结果：`v1.19.0-personal.1`正式GHCR Digest仍在使用；容器`sillytavern`状态为`running`、RestartCount为0。Compose由飞牛 OS 管理，项目`sillytavern`，工作目录`/vol3/1000/SillyTavern`，配置文件`/vol3/1000/SillyTavern/docker-compose.yml`。NAS Tools仍为`personal/stable@2f6a9c54`、origin为个人Fork、tracking为`origin/personal/stable`、工作区clean。NAS BaiBaoKu仍为`b211a4e9`/0.7.3、origin为原作者仓库、detached HEAD、工作区clean；个人Fork现已建立`main`和`personal/stable`，但NAS尚未切换。完整SHA、Digest和挂载路径以Production Baseline与Release Operations为准。
 
 正式镜像仅确认启动、Health、Vertex普通RP正文生成、刷新后聊天记录保留。Candidate的多轮、Stop、Regenerate等历史结果单独保留，不自动算作正式镜像已验证。清理、备份恢复、飞牛GUI方案和既有安全警告的后续责任见Operations待办；本轮不处理这些事项。
 
@@ -40,7 +40,7 @@ Decision Log、SH取舍索引及C-E0交接是对应阶段的历史证据。已�
 | --- | --- | --- |
 | SillyTavern Personal | `SurgeXW0508/SillyTavern`，个人维护者负责审查和发布；官方ST是长期上游 | `upstream/release`纯官方基线，`stage/*`独立开发/验证，`release`个人正式稳定分支；Core拥有原生生成与消息/历史正确性，生产使用验证过的GHCR Digest |
 | ST-BaiBai-Tools | `SurgeXW0508/ST-BaiBai-Tools`维护最小个人策略；`baibai-git/ST-BaiBai-Tools`为功能上游 | `main`仅同步上游，`personal/stable`唯一部署分支；负责独立前端体验，Save Generate不装配，不再取得Core生成生命周期 |
-| BaiBaoKu | `baibai-git/baibaoku`上游维护代码，个人维护者只固定/验证使用组合 | 保持原版，无个人Fork；负责独立Server Plugin/数据库/服务，核心接口接管等变更必须重新审查边界 |
+| BaiBaoKu | `SurgeXW0508/baibaoku`个人Fork；`baibai-git/baibaoku`为上游 | `main`纯上游同步镜像，`personal/stable`唯一生产分支；负责独立Server Plugin/数据库/服务，核心接口接管等变更必须重新审查边界 |
 
 三仓库分别升级，不因更新其中一个而顺手更新另一个。Shalistera仅作为参考来源；没有自动同步或整分支合入关系。
 
@@ -58,7 +58,7 @@ Decision Log、SH取舍索引及C-E0交接是对应阶段的历史证据。已�
 | Save Generate / 后台任务 / 消息恢复 | 柏宝，但本组合不启用 | ST正常生成 | 整个Save Generate关闭；不保留Vertex内部调用契约 |
 | 自动重试/黑名单重试（Generate Retry） | Pending Ownership Review | 柏宝独立可选功能 | 与Save Generate不同；不从Save Generate不装配推断其开关或兼容性，不宣称其可安全接管Vertex |
 | 独立体验UI | 柏宝箱 | 未在本轮重新审查 | 不得获得Vertex生成生命周期所有权 |
-| 独立数据库/服务 | 柏宝库 | 未在本轮重新审查 | 保持原版；不能凭服务存在推断已启用Save Generate |
+| 独立数据库/服务 | 柏宝库 | 未在本轮重新审查 | 当前Runtime仍与上游等价；个人Fork只隔离上游同步与生产分支，不代表启用Save Generate |
 | Fast Chat / Character Cache / Early Bridge | Pending Ownership Review | 多方 | R2/R3/R4后置，不提前选Owner |
 | Token Count失败结算 / Tokenizer资源初始化 | ST | 柏宝性能Bridge另行审查 | 本轮仅修Core生命周期；不引入缓存或批量Bridge |
 | Reasoning初始化 / 编辑与基础Chat导入 | ST | — | Handler单次装配；导入只创建新文件 |
@@ -75,13 +75,13 @@ Decision Log、SH取舍索引及C-E0交接是对应阶段的历史证据。已�
 | Personal ST运行代码 | `SurgeXW0508/SillyTavern:release`（冻结Runtime） | `090cbba6d40e5d117ab41a9e6deb20b40e2dc336`；Phase C冻结运行基线；之后的C-E0提交仅修改文档 |
 | 柏宝箱上游同步基线 | `baibai-git/ST-BaiBai-Tools:main` → `SurgeXW0508/ST-BaiBai-Tools:main` | `1e87dfaad87819a90d8032530a62a2ed29f97aea`，实际package/manifest版本1.1.5 |
 | 柏宝箱唯一个人部署分支 | `SurgeXW0508/ST-BaiBai-Tools:personal/stable` | `2f6a9c54d2c906b4a0e44d20c12d0712552e393d`为验证Runtime；维护HEAD `ac1279a7535a424c3dc3b2f7a5b2913783fdf7e8`仅AGENTS链接，源码/dist相同；跟踪`origin/personal/stable` |
-| 柏宝库 | `baibai-git/baibaoku`原版，无Personal Fork | `b211a4e97fdaec24dc8b90c85ddc198fac9ac200`，0.7.3 |
+| 柏宝库 | `SurgeXW0508/baibaoku:personal/stable`（上游等价Runtime基线） | `b211a4e97fdaec24dc8b90c85ddc198fac9ac200`，0.7.3；NAS仍处于原作者origin + detached HEAD，待一次性切换 |
 
 上述包含冻结验证基线与仓库维护HEAD；当前NAS实际组合已在Production Baseline登记，Tools实际仍为`2f6a9c54`，不能用维护HEAD `ac1279a7`替代。柏宝箱个人差异只有Save Generate生命周期关闭策略、对应构建/测试和简短维护入口；没有Vertex Adapter，也没有其他柏宝优化修改。
 
 此前审查的上游1.1.5仍无条件装配Save Generate、默认开启并存在false→true旧迁移。Personal Stable在装配入口移除导入/安装及面板通知，设置归一false、移除强制开启迁移、UI固定禁用；不物理删除上游模块，也不需要手工删源码或额外Patch。Generate Retry是另一功能，本策略没有修改其实现。生产dist从锁定依赖的源码构建，连续两次构建哈希一致。
 
-Phase C基于1.1.2的外部策略patch，以及更早的两个Vertex兼容patch，只作为历史过程证据。它们不再是正式安装、更新或回滚步骤；不要叠加到personal/stable上。柏宝库源代码保持原版。
+Phase C基于1.1.2的外部策略patch，以及更早的两个Vertex兼容patch，只作为历史过程证据。它们不再是正式安装、更新或回滚步骤；不要叠加到personal/stable上。柏宝库个人Fork当前只用于维护分支隔离，Runtime基线仍与上游`b211a4e9`等价，没有额外个人Runtime patch。
 
 安装或更新Personal Stable后必须全页重新加载；不承诺已经运行的旧JS页面热卸载。旧后台任务、数据库记录和聊天数据不被删除或自动恢复；切换前必须在原环境检查并结算/导出需要保留的任务。未来升级后的进程启动/全页重载需要在对应任务中验证；本轮只登记文档，不操作正式环境。
 
@@ -240,20 +240,45 @@ Owner Review：本轮只改变维护记录和交接文档，没有能力实现�
 8. 验证候选是旧stable后代，再fast-forward推进`personal/stable`。不得force-push/rebase已公开的stable历史；rebase仅限尚未发布的候选，最终推广仍须保留旧stable祖先关系。
 9. 更新本canonical组合表、Owner/Disabled Features/Decision Log及结果记录；独立审查通过后，才进入另行授权的生产Update和全页重载。
 
-不可删除或改名`personal/stable`。原版柏宝库可选扩展管理接管在跟踪分支消失或游离HEAD时可能选默认分支；维护任务必须核验origin、当前分支和跟踪关系。柏宝扩展管理接管仍为Pending Ownership Review，本轮没有修改开关；原生路由测试不等于已验证NAS的全部接管配置。
+不可删除或改名柏宝箱或柏宝库的`personal/stable`。柏宝库可选扩展管理接管在跟踪分支消失或游离HEAD时可能选默认分支；维护任务必须核验origin、当前分支和跟踪关系。柏宝扩展管理接管仍为Pending Ownership Review，本轮没有修改开关；原生路由测试不等于已验证NAS的全部接管配置。
 
 柏宝箱自身版本提示有上游manifest兜底；提示不代表personal/stable已经有新提交。个人更新以ST扩展管理器的当前分支、commit及远端检查为准；本轮不改提示或更新实现。
 
-## 柏宝库固定版本策略
+## 柏宝库 Personal Fork 与固定生产分支策略
 
-不建立无代码差异的Personal Fork。固定原版精确commit，避免生产静默升级。隔离组合已用ST配置`enableServerPluginsAutoUpdate: false`，同时阻止ST启动更新器和柏宝库读取该配置的自更新入口；没有修改正式配置，也没有把仓库默认值改掉。
+个人Fork：`SurgeXW0508/baibaoku`；上游：`baibai-git/baibaoku`。
 
-未来柏宝库升级流程：
+- `main`：纯上游同步镜像，只接收原作者main，不放个人Runtime策略。
+- `personal/stable`：唯一生产分支，NAS只允许跟踪此分支。
+- `personal/stable`于2026-11-12从个人Fork的main创建，初始Runtime基线为`b211a4e97fdaec24dc8b90c85ddc198fac9ac200`（0.7.3），与上游等价；本次创建分支和新增维护文档不包含Runtime改动。
+- 截至2026-11-12，NAS仍处于原作者origin + detached HEAD `b211a4e9`，工作区clean。个人Fork分支已准备，但NAS的一次性remote/branch整理尚未执行；不得把GitHub分支创建写成NAS已经切换。
 
-1. 确认上游目标版本/commit、当前实际SHA及本地修改，不建立无代码差异的个人Fork。
-2. 做Owner Review，重点审查Server Plugin启动/销毁/升级、数据库和聊天保存、Extension Manager、自更新，以及它们与ST/柏宝箱的接口与生命周期。
-3. 用当前ST和Tools组合隔离验证，确认数据兼容、异常回退和回滚边界；不要顺手升级Tools。
-4. 经对应任务授权才更新NAS的原版插件；核验实际SHA和相关功能后更新Production Baseline/验证组合。单独设置柏宝库的git自更新开关不能替代核验ST启动自动更新设置；不为验证强制开启未使用的接管功能。
+### 上游更新流程
+
+1. 将原作者main同步到个人Fork的`main)，不直接更新NAS。
+2. 对比新旧上游，检查Server Plugin生命周期、数据库与迁移、依赖、自更新、正则引擎桥接，以及与ST Core和柏宝箱的接口。
+3. 完成本文Capability Ownership Review，并运行受影响测试；检查`package.json`与lockfile变化。涉及数据库格式或迁移时，必须独立确认兼容和恢复边界。
+4. 审查通过后，以正常PR/快进方式推进个人`personal/stable)。不要force-push、rebase或重写公开stable历史。
+5. 只有用户明确授权后才更新NAS。
+
+### NAS更新入口
+
+柏宝库位于独立挂载目录`/vol3/1000/SillyTavern/plugins/baibaoku`（容器内`/home/node/app/plugins/baibaoku`），不在ST镜像内。更新它不需要重新构建Docker镜像，但必须重启SillyTavern Server。
+
+一次性完成NAS remote/branch整理后，日常更新通过飞牛Docker图形界面打开`sillytavern`容器终端，先核验工作区、origin和当前分支，再定向执行：
+
+```bash
+git -C /home/node/app/plugins/baibaoku status --short --branch
+git -C /home/node/app/plugins/baibaoku remote -v
+git -C /home/node/app/plugins/baibaoku branch --show-current
+git -C /home/node/app/plugins/baibaoku pull --ff-only origin personal/stable
+```
+
+只有工作区干净、当前分支为`personal/stable)、origin指向个人Fork时才允许执行。依赖manifest/lockfile确实变化时，才按仓库安装说明执行生产依赖安装；之后通过飞牛Docker图形界面重启容器，并验证`/api/plugins/baibaoku/v1/status`及本次受影响功能。
+
+**不要用`node /home/node/app/plugins.js update`作为柏宝库单独更新命令**：SillyTavern原生脚本会遍历并更新plugins目录下所有Git Server Plugin，不只更新柏宝库。不要为柏宝库单独更新而开启全局`enableServerPluginsAutoUpdate)；当前生产组合保持`enableServerPluginsAutoUpdate: false`。
+
+完整的一次性NAS分支整理、日常更新、依赖安装、重启、回滚与数据保护步骤见[柏宝库 Personal Maintenance](https://github.com/SurgeXW0508/baibaoku/blob/personal/stable/docs/PERSONAL_MAINTENANCE.md)。
 
 ## 版本与回滚
 
@@ -263,7 +288,7 @@ Owner Review：本轮只改变维护记录和交接文档，没有能力实现�
 
 正式GHCR部署、实际Image ID、容器healthy/RestartCount=0及两插件SHA已由用户提供并登记。Backrest自动备份/恢复验证、真实生产数据恢复演练尚未完成；因此不宣称完整生产恢复能力已验证。Current/Previous与数据恢复分开，完整目录备份和官方过渡回滚镜像继续保留；不读取聊天正文或秘密。
 
-柏宝箱Fork已在personal/stable放置简短AGENTS.md，链接本文，不复制矩阵。所有涉及柏宝的任务书必须显式要求先阅读本文；柏宝库仍保持上游原版。
+柏宝箱与柏宝库的个人`personal/stable`分支均放置简短AGENTS.md，链接本文及各自部署Runbook，不复制能力矩阵。所有涉及三仓库的任务必须显式要求先阅读本文；具体部署步骤分别见[柏宝箱维护与更新](https://github.com/SurgeXW0508/ST-BaiBai-Tools/blob/personal/stable/docs/PERSONAL_MAINTENANCE.md)和[柏宝库维护与更新](https://github.com/SurgeXW0508/baibaoku/blob/personal/stable/docs/PERSONAL_MAINTENANCE.md)。
 
 公开stable需要回滚时，优先以新的revert提交恢复已验证代码树，保留正常快进更新链；应急整组合快照恢复后暂停更新，不能通过强推stable倒退来驱动客户端回滚。
 
