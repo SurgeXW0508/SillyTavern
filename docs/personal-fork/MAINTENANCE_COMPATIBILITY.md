@@ -255,10 +255,10 @@ Owner Review：本轮只改变维护记录和交接文档，没有能力实现�
 
 ### 上游更新流程
 
-1. 将原作者main同步到个人Fork的`main)，不直接更新NAS。
+1. 将原作者main同步到个人Fork的`main`，不直接更新NAS。
 2. 对比新旧上游，检查Server Plugin生命周期、数据库与迁移、依赖、自更新、正则引擎桥接，以及与ST Core和柏宝箱的接口。
 3. 完成本文Capability Ownership Review，并运行受影响测试；检查`package.json`与lockfile变化。涉及数据库格式或迁移时，必须独立确认兼容和恢复边界。
-4. 审查通过后，以正常PR/快进方式推进个人`personal/stable)。不要force-push、rebase或重写公开stable历史。
+4. 审查通过后，以正常PR/快进方式推进个人`personal/stable`。不要force-push、rebase或重写公开stable历史。
 5. 只有用户明确授权后才更新NAS。
 
 ### NAS更新入口
@@ -274,9 +274,9 @@ git -C /home/node/app/plugins/baibaoku branch --show-current
 git -C /home/node/app/plugins/baibaoku pull --ff-only origin personal/stable
 ```
 
-只有工作区干净、当前分支为`personal/stable)、origin指向个人Fork时才允许执行。依赖manifest/lockfile确实变化时，才按仓库安装说明执行生产依赖安装；之后通过飞牛Docker图形界面重启容器，并验证`/api/plugins/baibaoku/v1/status`及本次受影响功能。
+只有工作区干净、当前分支为`personal/stable`、origin指向个人Fork时才允许执行。依赖manifest/lockfile确实变化时，才按仓库安装说明执行生产依赖安装；之后通过飞牛Docker图形界面重启容器，并验证`/api/plugins/baibaoku/v1/status`及本次受影响功能。
 
-**不要用`node /home/node/app/plugins.js update`作为柏宝库单独更新命令**：SillyTavern原生脚本会遍历并更新plugins目录下所有Git Server Plugin，不只更新柏宝库。不要为柏宝库单独更新而开启全局`enableServerPluginsAutoUpdate)；当前生产组合保持`enableServerPluginsAutoUpdate: false`。
+**不要用`node /home/node/app/plugins.js update`作为柏宝库单独更新命令**：SillyTavern原生脚本会遍历并更新plugins目录下所有Git Server Plugin，不只更新柏宝库。不要为柏宝库单独更新而开启全局`enableServerPluginsAutoUpdate`；当前生产组合保持`enableServerPluginsAutoUpdate: false`。
 
 完整的一次性NAS分支整理、日常更新、依赖安装、重启、回滚与数据保护步骤见[柏宝库 Personal Maintenance](https://github.com/SurgeXW0508/baibaoku/blob/personal/stable/docs/PERSONAL_MAINTENANCE.md)。
 
