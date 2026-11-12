@@ -12,6 +12,8 @@ ghcr.io/surgexw0508/sillytavern-personal@sha256:22973f7169fa694a0894b054e2b754cc
 
 实际Image ID为`sha256:dfb4f08735296b0b7610e9936cbce707af8d0021ac6d4eaafadc93c074b09e01`。Release source是`1af2180585e5bbe49159bc8884d5c890641f13c3`，Runtime仍是`090cbba6d40e5d117ab41a9e6deb20b40e2dc336`；后续文档HEAD不是新的镜像source。
 
+2026-11-12再次核验：容器状态为`running`、RestartCount为0；Compose 标签确认项目名为`sillytavern`，WorkingDir为`/vol3/1000/SillyTavern`，配置文件为`/vol3/1000/SillyTavern/docker-compose.yml`。挂载仍将宿主机的`config`、`data`、`plugins`、`extensions`分别映射到容器对应目录；视频目录以只读方式挂载。飞牛 Docker 已正式管理该 Compose 项目，无需迁移管理方式。
+
 NAS Tools实际为`personal/stable@2f6a9c54d2c906b4a0e44d20c12d0712552e393d`，origin为个人Fork，tracking为`origin/personal/stable`，工作区clean；BaiBaoKu为原版0.7.3/`b211a4e97fdaec24dc8b90c85ddc198fac9ac200`。Tools仓库维护HEAD `ac1279a7`仅改AGENTS链接，不能把它写成NAS已安装SHA。
 
 正式镜像只确认启动、Health、Vertex普通RP正文生成和刷新后聊天记录保留。Candidate多轮/Stop/Regenerate等历史测试单独记录，未在正式环境复验的能力不标通过。生产数据恢复和安全评估也不由healthy状态代替。
@@ -46,7 +48,59 @@ Tools部署pin仍为已验证的`2f6a9c54`。已有核验工具仅在全部Git�
 
 当前Compose已经使用正式GHCR Digest。NAS不再常规clone、build或patch Runtime；不跟踪浮动latest，不手改运行文件。每次变更先选已审查的Release与三组件精确SHA，保留原挂载/配置/网络和用户数据；拉取正式Digest、切换对应服务、确认Health/Smoke后再更新Current/Previous及Production Baseline。
 
-**飞牛OS GUI更新方式尚未最终确认。** 本文不规定按钮、界面路径、环境文件接入方案或一键更新承诺。需要后续单独核实实际管理入口后再固化操作步骤，本轮不设计或执行GUI/Compose操作。
+## 飞牛 OS 图形化更新流程（已实机确认）
+
+2026-11-12已通过容器标签确认，`sillytavern` 是飞牛 Docker Compose 项目：
+
+- Project：`sillytavern`
+- WorkingDir：`/vol3/1000/SillyTavern`
+- ConfigFiles：`/vol3/1000/SillyTavern/docker-compose.yml`
+
+生产 Compose 使用固定 GHCR Digest，而不是浮动标签。后续 ST Runtime 更新可以完全通过飞牛 Docker 图形界面完成，不需要 SSH 登录 NAS。
+
+### 正常更新步骤
+
+1. Work 完成 Runtime 修改、审查、测试，并按授权流程合入个人 `release)。
+2. 使用仓库既有 Personal Release Workflow 发布正式版本。GitHub Actions 构建并推送 GHCR 镜像；从对应 Release 的 Validated Stack / 发布信息取得本次**不可变 Digest**。
+3. 打开飞牛 OS → Docker → Compose → `sillytavern` 项目，编辑现有 Compose 配置。
+4. 只将 `image:` 改为本次已审查的完整 Digest，例如：
+
+   ```yaml
+   image: ghcr.io/surgexw0508/sillytavern-personal@sha256:<new-digest>
+   ```
+
+5. 保持原项目目录、服务名、网络、端口、环境变量、重启策略和所有挂载不变；在原 Compose 项目中保存并部署/重新创建服务。
+6. 在飞牛 Docker 图形界面确认容器使用新镜像、状态正常、没有持续重启，并查看启动日志；再进行本次变更涉及的最小业务 Smoke。
+7. 验收成功后记录新的 Digest、Image ID、实际插件 SHA 和验收范围，更新 Production Baseline。保留上一个已验证组合作为回滚目标。
+
+### 必须保留的部署路径
+
+```text
+Compose project: sillytavern
+WorkingDir:      /vol3/1000/SillyTavern
+Config file:     /vol3/1000/SillyTavern/docker-compose.yml
+
+./config    -> /home/node/app/config
+./data      -> /home/node/app/data
+./plugins   -> /home/node/app/plugins
+./extensions -> /home/node/app/public/scripts/extensions/third-party
+/vol1/1000/ST-Video/videos -> /media/video-clips (read-only)
+```
+
+### Digest 更新注意事项
+
+- 飞牛“本地镜像”列表中显示的镜像更新提示，与 Compose 服务实际切换不是一回事。
+- 当前 Compose 固定使用 `@sha256:...`。只拉取新镜像、或在本地镜像列表中对旧 Digest 点击更新，都不会自动改变 Compose 引用。
+- 正确入口是编辑 `sillytavern` Compose 项目的 `image:`，替换成新 Digest，再由同一 Compose 项目部署。
+- 不改成 `latest`，不使用浮动标签，不在运行容器内部修改 ST Runtime 文件，也不另起一个共享同一数据目录的临时 ST 容器。
+- 回滚时在同一 Compose 配置中把 `image:` 恢复为上一个已验证 Digest，再通过飞牛图形界面重新部署。镜像回滚不等于数据回滚；不要因此覆盖用户数据。
+
+## Companion Plugin 更新入口
+
+- **柏宝箱**：通过 SillyTavern 原生第三方扩展管理器更新当前 `personal/stable) 分支，然后完整刷新浏览器。它是独立挂载的前端 Git Extension，不需要重建 ST 镜像。详细流程见 [ST-BaiBai-Tools Personal Maintenance](https://github.com/SurgeXW0508/ST-BaiBai-Tools/blob/personal/stable/docs/PERSONAL_MAINTENANCE.md)。
+- **柏宝库**：它是独立挂载的 Server Plugin，不属于前端扩展更新按钮。完成 NAS 一次性分支整理后，在飞牛 Docker 的 `sillytavern) 容器终端中只更新目标插件，再通过图形界面重启容器。不要用会遍历所有插件的全局更新命令。详细流程见 [BaiBaoKu Personal Maintenance](https://github.com/SurgeXW0508/baibaoku/blob/personal/stable/docs/PERSONAL_MAINTENANCE.md)。
+
+正常维护不需要 SSH。飞牛容器终端只用于柏宝库这类 Server Plugin 的定向 Git 更新；重启和 Compose 镜像切换均通过飞牛图形界面完成。
 
 仓库已有的可选只读入口如下，实际是否在NAS使用未在本轮提供；不据此宣称自动/GUI更新已实现：
 
@@ -74,7 +128,7 @@ Runtime故障优先回到上一个已验证镜像，同时确认Tools/BaiBaoKu�
 | 官方1.19.0回滚镜像仍保留 | 用户在下一次Personal Release成功后按Current/Previous规则评估轮换 |
 | 完整目录备份仍保留 | 用户确认恢复保障和保留策略后另行决定；不把现有目录备份写成已验证恢复点 |
 | Backrest自动备份和恢复验证未完成 | 用户在独立备份任务中完善并留验收证据 |
-| 飞牛OS GUI更新方式未最终确认 | 部署维护者与用户后续核实实际入口；不宣称已实现 |
+| 柏宝库 NAS Git 跟踪关系尚未整理 | 单独授权一次性将 NAS 插件从原作者 detached checkout 切换到个人 Fork 的 `personal/stable`；不影响当前运行版本 |
 | 真实生产数据恢复演练未进行 | 用户在独立恢复任务中验证，不在本轮操作真实数据 |
 | 部分Vertex及非Vertex能力未正式验收 | 对应能力变化或确有使用需要时，由维护者/用户补受影响组合验证，不追增本轮开发 |
 | 既有启动日志`listen is enabled but private request filter is disabled`尚未单独评估 | 部署维护者在独立安全审查中判断；本轮只记录，不推断原因/暴露范围或调整配置 |
