@@ -14,7 +14,7 @@ ghcr.io/surgexw0508/sillytavern-personal@sha256:22973f7169fa694a0894b054e2b754cc
 
 2026-11-12再次核验：容器状态为`running`、RestartCount为0；Compose 标签确认项目名为`sillytavern`，WorkingDir为`/vol3/1000/SillyTavern`，配置文件为`/vol3/1000/SillyTavern/docker-compose.yml`。挂载仍将宿主机的`config`、`data`、`plugins`、`extensions`分别映射到容器对应目录；视频目录以只读方式挂载。飞牛 Docker 已正式管理该 Compose 项目，无需迁移管理方式。
 
-NAS Tools实际为`personal/stable@2f6a9c54d2c906b4a0e44d20c12d0712552e393d`，origin为个人Fork，tracking为`origin/personal/stable`，工作区clean。此后本轮在Tools个人stable分支增加的Runbook、AGENTS和README均为文档变更，不包含Runtime或`dist`；NAS实际SHA仍为`2f6a9c54`。BaiBaoKu当前Runtime为上游等价0.7.3/`b211a4e97fdaec24dc8b90c85ddc198fac9ac200`；NAS仍使用原作者origin并处于detached HEAD，个人Fork的`personal/stable`已建立但尚未切换。
+NAS Tools实际为`personal/stable@2f6a9c54d2c906b4a0e44d20c12d0712552e393d`，origin为个人Fork，tracking为`origin/personal/stable`，工作区clean。此后本轮在Tools个人stable分支增加的Runbook、AGENTS和README均为文档变更，不包含Runtime或`dist`；NAS实际SHA仍为`2f6a9c54`。BaiBaoKu NAS已于2026-11-12完成Git跟踪关系整理：当前分支`personal/stable`，origin为`SurgeXW0508/baibaoku`，upstream为`baibai-git/baibaoku`，tracking为`origin/personal/stable`，工作区clean；当前Git HEAD为`4814830f`，Runtime仍是`b211a4e97fdaec24dc8b90c85ddc198fac9ac200`（0.7.3），并保留`backup/pre-personal-stable-20261112`。
 
 正式镜像只确认启动、Health、Vertex普通RP正文生成和刷新后聊天记录保留。Candidate多轮/Stop/Regenerate等历史测试单独记录，未在正式环境复验的能力不标通过。生产数据恢复和安全评估也不由healthy状态代替。
 
@@ -98,9 +98,9 @@ Config file:     /vol3/1000/SillyTavern/docker-compose.yml
 ## Companion Plugin 更新入口
 
 - **柏宝箱**：通过 SillyTavern 原生第三方扩展管理器更新当前 `personal/stable` 分支，然后完整刷新浏览器。它是独立挂载的前端 Git Extension，不需要重建 ST 镜像。详细流程见 [ST-BaiBai-Tools Personal Maintenance](https://github.com/SurgeXW0508/ST-BaiBai-Tools/blob/personal/stable/docs/PERSONAL_MAINTENANCE.md)。
-- **柏宝库**：它是独立挂载的 Server Plugin，不属于前端扩展更新按钮。完成 NAS 一次性分支整理后，在飞牛 Docker 的 `sillytavern` 容器终端中只更新目标插件，再通过图形界面重启容器。不要用会遍历所有插件的全局更新命令。详细流程见 [BaiBaoKu Personal Maintenance](https://github.com/SurgeXW0508/baibaoku/blob/personal/stable/docs/PERSONAL_MAINTENANCE.md)。
+- **柏宝库**：它是独立挂载的 Server Plugin，不属于前端扩展更新按钮。NAS 已完成一次性分支整理；日常在飞牛 Docker 的 `sillytavern` 容器终端中只更新目标插件，再通过图形界面重启容器。不要用会遍历所有插件的全局更新命令。详细流程见 [BaiBaoKu Personal Maintenance](https://github.com/SurgeXW0508/baibaoku/blob/personal/stable/docs/PERSONAL_MAINTENANCE.md)。
 
-正常维护不需要 SSH。飞牛容器终端只用于柏宝库这类 Server Plugin 的定向 Git 更新；重启和 Compose 镜像切换均通过飞牛图形界面完成。
+正常维护不需要 SSH 登录。飞牛 Docker 容器终端只用于柏宝库这类 Server Plugin 的定向 Git 更新；重启和 Compose 镜像切换均通过飞牛图形界面完成。
 
 仓库已有的可选只读入口如下，实际是否在NAS使用未在本轮提供；不据此宣称自动/GUI更新已实现：
 
