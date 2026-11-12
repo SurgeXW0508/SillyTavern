@@ -60,7 +60,7 @@ Tools部署pin仍为已验证的`2f6a9c54`。已有核验工具仅在全部Git�
 
 ### 正常更新步骤
 
-1. Work 完成 Runtime 修改、审查、测试，并按授权流程合入个人 `release)。
+1. Work 完成 Runtime 修改、审查、测试，并按授权流程合入个人 `release`。
 2. 使用仓库既有 Personal Release Workflow 发布正式版本。GitHub Actions 构建并推送 GHCR 镜像；从对应 Release 的 Validated Stack / 发布信息取得本次**不可变 Digest**。
 3. 打开飞牛 OS → Docker → Compose → `sillytavern` 项目，编辑现有 Compose 配置。
 4. 只将 `image:` 改为本次已审查的完整 Digest，例如：
@@ -97,7 +97,7 @@ Config file:     /vol3/1000/SillyTavern/docker-compose.yml
 
 ## Companion Plugin 更新入口
 
-- **柏宝箱**：通过 SillyTavern 原生第三方扩展管理器更新当前 `personal/stable) 分支，然后完整刷新浏览器。它是独立挂载的前端 Git Extension，不需要重建 ST 镜像。详细流程见 [ST-BaiBai-Tools Personal Maintenance](https://github.com/SurgeXW0508/ST-BaiBai-Tools/blob/personal/stable/docs/PERSONAL_MAINTENANCE.md)。
+- **柏宝箱**：通过 SillyTavern 原生第三方扩展管理器更新当前 `personal/stable` 分支，然后完整刷新浏览器。它是独立挂载的前端 Git Extension，不需要重建 ST 镜像。详细流程见 [ST-BaiBai-Tools Personal Maintenance](https://github.com/SurgeXW0508/ST-BaiBai-Tools/blob/personal/stable/docs/PERSONAL_MAINTENANCE.md)。
 - **柏宝库**：它是独立挂载的 Server Plugin，不属于前端扩展更新按钮。完成 NAS 一次性分支整理后，在飞牛 Docker 的 `sillytavern) 容器终端中只更新目标插件，再通过图形界面重启容器。不要用会遍历所有插件的全局更新命令。详细流程见 [BaiBaoKu Personal Maintenance](https://github.com/SurgeXW0508/baibaoku/blob/personal/stable/docs/PERSONAL_MAINTENANCE.md)。
 
 正常维护不需要 SSH。飞牛容器终端只用于柏宝库这类 Server Plugin 的定向 Git 更新；重启和 Compose 镜像切换均通过飞牛图形界面完成。
