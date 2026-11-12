@@ -320,7 +320,7 @@ Decision：三个仓库统一采用“上游同步镜像 → 独立审查 → �
 
 - SillyTavern：`upstream/release`保持官方同步，`release`承载个人生产代码。NAS使用飞牛OS正式管理的Compose项目`sillytavern`，固定GHCR Digest；更新时通过飞牛Compose GUI修改完整Digest并重新部署，不使用latest。
 - 柏宝箱：个人Fork的`main`只同步原作者，`personal/stable`是唯一部署分支。NAS的origin指向个人Fork，酒馆扩展管理器只更新当前分支对应的`origin/<branch>`，因此只有推进个人stable后才会提示生产更新。
-- 柏宝库：个人Fork已建立`main`与`personal/stable)，初始Runtime与上游`b211a4e9`等价。NAS仍处于原作者origin + detached HEAD；一次性remote/branch整理尚未执行。日常更新使用飞牛Docker容器终端中的定向Git更新，然后通过GUI重启容器；不使用会更新全部Server Plugins的全局脚本。
+- 柏宝库：个人Fork已建立`main`与`personal/stable`，初始Runtime与上游`b211a4e9`等价。NAS仍处于原作者origin + detached HEAD；一次性remote/branch整理尚未执行。日常更新使用飞牛Docker容器终端中的定向Git更新，然后通过GUI重启容器；不使用会更新全部Server Plugins的全局脚本。
 - 三仓库的详细安装、更新、依赖、重启、回滚步骤分别见[Release Operations](PERSONAL_RELEASE_OPERATIONS.md)、[柏宝箱 Runbook](https://github.com/SurgeXW0508/ST-BaiBai-Tools/blob/personal/stable/docs/PERSONAL_MAINTENANCE.md)和[柏宝库 Runbook](https://github.com/SurgeXW0508/baibaoku/blob/personal/stable/docs/PERSONAL_MAINTENANCE.md)。
 
 交接规则：凡Runtime修改完成实现、测试和审查后，必须说明变更是否已进入生产分支/Release、NAS当前与目标commit或Digest，并主动询问用户是否现在更新NAS。文档/测试-only变更明确说明无需更新Runtime。不得自动发布、切换Digest、更新插件、重启容器或修改生产数据；部署必须得到用户明确授权。
