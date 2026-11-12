@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-11-09",
+  "updated_at": "2026-11-12",
   "phase_c_status": "formal_ghcr_deployed_basic_smoke_passed",
   "current_production": {
     "source": "user_provided_nas_results_2026-11-09",
@@ -25,7 +25,26 @@
     "baibaoku_repository": "baibai-git/baibaoku",
     "baibaoku_version": "0.7.3",
     "baibaoku_sha": "b211a4e97fdaec24dc8b90c85ddc198fac9ac200",
-    "baibaoku_source": "unmodified_upstream_no_personal_fork"
+    "baibaoku_source": "NAS_still_uses_upstream_origin_detached; personal_fork_personal_stable_created_but_not_yet_installed",
+    "container_status_at_2026_11_12": "running",
+    "restart_count_at_2026_11_12": 0,
+    "compose_project": "sillytavern",
+    "compose_working_dir": "/vol3/1000/SillyTavern",
+    "compose_config_file": "/vol3/1000/SillyTavern/docker-compose.yml",
+    "compose_mounts": [
+      "/vol3/1000/SillyTavern/config -> /home/node/app/config (rw)",
+      "/vol3/1000/SillyTavern/data -> /home/node/app/data (rw)",
+      "/vol3/1000/SillyTavern/plugins -> /home/node/app/plugins (rw)",
+      "/vol3/1000/SillyTavern/extensions -> /home/node/app/public/scripts/extensions/third-party (rw)",
+      "/vol1/1000/ST-Video/videos -> /media/video-clips (ro)"
+    ],
+    "baibaoku_origin_repository": "baibai-git/baibaoku",
+    "baibaoku_branch": "detached",
+    "baibaoku_worktree": "clean",
+    "baibaoku_personal_fork_repository": "SurgeXW0508/baibaoku",
+    "baibaoku_personal_fork_main_sha": "b211a4e97fdaec24dc8b90c85ddc198fac9ac200",
+    "baibaoku_personal_stable_created_from": "main",
+    "baibaoku_personal_stable_runtime_base_sha": "b211a4e97fdaec24dc8b90c85ddc198fac9ac200"
   },
   "target_release": {
     "tag": "v1.19.0-personal.1",
@@ -98,11 +117,6 @@
       "owner": "user_in_a_separate_backup_task"
     },
     {
-      "item": "fnos_gui_update_procedure",
-      "status": "pending_confirmation",
-      "owner": "deployment_maintainer_with_user"
-    },
-    {
       "item": "production_data_restore_drill",
       "status": "not_performed",
       "owner": "user_in_a_separate_restore_task"
@@ -116,6 +130,11 @@
       "item": "existing_private_request_filter_startup_warning",
       "status": "not_separately_assessed",
       "owner": "deployment_maintainer_in_a_separate_security_review"
+    },
+    {
+      "item": "baibaoku_nas_git_tracking_alignment",
+      "status": "pending_one_time_remote_and_branch_switch",
+      "owner": "user_and_maintainer_in_a_separately_authorized_fnOS_container_terminal_task"
     }
   ],
   "documentation_closeout": {
@@ -164,8 +183,16 @@
     "verified_restore_point": null
   },
   "nas_update_interface": {
-    "compose": "formal_ghcr_digest_in_use",
-    "fnos_gui_update_procedure": "pending_confirmation"
+    "compose": "fnos_managed_compose_project",
+    "verified_at": "2026-11-12",
+    "fnos_gui_update_procedure": "confirmed_edit_immutable_image_digest_in_existing_compose_project_then_redeploy",
+    "compose_project": "sillytavern",
+    "compose_working_dir": "/vol3/1000/SillyTavern",
+    "compose_config_file": "/vol3/1000/SillyTavern/docker-compose.yml",
+    "normal_st_update": "fnos_docker_compose_gui_edit_digest_and_redeploy",
+    "tools_update": "sillytavern_native_extension_manager_updates_origin_current_branch",
+    "baibaoku_update": "fnos_docker_container_terminal_targeted_git_pull_then_gui_restart",
+    "baibaoku_nas_git_alignment": "pending_one_time_origin_and_personal_stable_switch"
   },
   "security_observation": {
     "message": "listen is enabled but private request filter is disabled",
