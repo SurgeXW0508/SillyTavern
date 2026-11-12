@@ -6,7 +6,7 @@ Canonical compatibility document。当前正式制品为[v1.19.0-personal.1](htt
 
 先读[Production Baseline](PRODUCTION_BASELINE.json)确认实际部署，再对照本文Owner规则，最后按[Release Operations](PERSONAL_RELEASE_OPERATIONS.md)执行对应更新；正式镜像的实际验收范围见[Release Closeout](RELEASE_CLOSEOUT.md)。无需从历史聊天恢复当前版本。
 
-2026-11-12用户提供的NAS结果：`v1.19.0-personal.1`正式GHCR Digest仍在使用；容器`sillytavern`状态为`running`、RestartCount为0。Compose由飞牛 OS 管理，项目`sillytavern`，工作目录`/vol3/1000/SillyTavern`，配置文件`/vol3/1000/SillyTavern/docker-compose.yml`。NAS Tools仍为`personal/stable@2f6a9c54`、origin为个人Fork、tracking为`origin/personal/stable`、工作区clean。NAS BaiBaoKu仍为`b211a4e9`/0.7.3、origin为原作者仓库、detached HEAD、工作区clean；个人Fork现已建立`main`和`personal/stable`，但NAS尚未切换。完整SHA、Digest和挂载路径以Production Baseline与Release Operations为准。
+2026-11-12用户提供的NAS结果：`v1.19.0-personal.1`正式GHCR Digest仍在使用；容器`sillytavern`状态为`running`、RestartCount为0。Compose由飞牛 OS 管理，项目`sillytavern`，工作目录`/vol3/1000/SillyTavern`，配置文件`/vol3/1000/SillyTavern/docker-compose.yml`。NAS Tools仍为`personal/stable@2f6a9c54`、origin为个人Fork、tracking为`origin/personal/stable`、工作区clean。NAS BaiBaoKu 已于2026-11-12完成Git跟踪关系整理：当前分支`personal/stable`，跟踪`origin/personal/stable`，origin为个人Fork，upstream为原作者，工作区clean；NAS当前Git HEAD `4814830f`，Runtime基线仍为`b211a4e9`/0.7.3，另有`backup/pre-personal-stable-20261112`备份分支。后续Runbook文档提交使远端stable继续前进；更新前应fetch并按文档差异判断，不要将文档HEAD误认为Runtime变化。完整SHA、Digest和挂载路径以Production Baseline与Release Operations为准。
 
 正式镜像仅确认启动、Health、Vertex普通RP正文生成、刷新后聊天记录保留。Candidate的多轮、Stop、Regenerate等历史结果单独保留，不自动算作正式镜像已验证。清理、备份恢复、飞牛GUI方案和既有安全警告的后续责任见Operations待办；本轮不处理这些事项。
 
@@ -74,8 +74,8 @@ Decision Log、SH取舍索引及C-E0交接是对应阶段的历史证据。已�
 | --- | --- | --- |
 | Personal ST运行代码 | `SurgeXW0508/SillyTavern:release`（冻结Runtime） | `090cbba6d40e5d117ab41a9e6deb20b40e2dc336`；Phase C冻结运行基线；之后的C-E0提交仅修改文档 |
 | 柏宝箱上游同步基线 | `baibai-git/ST-BaiBai-Tools:main` → `SurgeXW0508/ST-BaiBai-Tools:main` | `1e87dfaad87819a90d8032530a62a2ed29f97aea`，实际package/manifest版本1.1.5 |
-| 柏宝箱唯一个人部署分支 | `SurgeXW0508/ST-BaiBai-Tools:personal/stable` | `2f6a9c54d2c906b4a0e44d20c12d0712552e393d`为验证Runtime；维护HEAD `ac1279a7535a424c3dc3b2f7a5b2913783fdf7e8`仅AGENTS链接，源码/dist相同；跟踪`origin/personal/stable` |
-| 柏宝库 | `SurgeXW0508/baibaoku:personal/stable`（上游等价Runtime基线） | `b211a4e97fdaec24dc8b90c85ddc198fac9ac200`，0.7.3；NAS仍处于原作者origin + detached HEAD，待一次性切换 |
+| 柏宝箱唯一个人部署分支 | `SurgeXW0508/ST-BaiBai-Tools:personal/stable` | `2f6a9c54d2c906b4a0e44d20c12d0712552e393d`为NAS验证Runtime；当前远端维护HEAD `2816699503d8bbab1e601f955ecefe30d8b2e57d`仅文档变更，源码/dist相同；NAS仍跟踪`origin/personal/stable` |
+| 柏宝库唯一个人部署分支 | `SurgeXW0508/baibaoku:personal/stable` | NAS Git HEAD `4814830f2d161dfff89e75370effa31d669586d9`；Runtime仍为`b211a4e97fdaec24dc8b90c85ddc198fac9ac200`（0.7.3），本次仅文档变更；跟踪`origin/personal/stable`，原作者为`upstream` |
 
 上述包含冻结验证基线与仓库维护HEAD；当前NAS实际组合已在Production Baseline登记，Tools实际仍为`2f6a9c54`，不能用维护HEAD `ac1279a7`替代。柏宝箱个人差异只有Save Generate生命周期关闭策略、对应构建/测试和简短维护入口；没有Vertex Adapter，也没有其他柏宝优化修改。
 
@@ -251,7 +251,7 @@ Owner Review：本轮只改变维护记录和交接文档，没有能力实现�
 - `main`：纯上游同步镜像，只接收原作者main，不放个人Runtime策略。
 - `personal/stable`：唯一生产分支，NAS只允许跟踪此分支。
 - `personal/stable`于2026-11-12从个人Fork的main创建，初始Runtime基线为`b211a4e97fdaec24dc8b90c85ddc198fac9ac200`（0.7.3），与上游等价；本次创建分支和新增维护文档不包含Runtime改动。
-- 截至2026-11-12，NAS仍处于原作者origin + detached HEAD `b211a4e9`，工作区clean。个人Fork分支已准备，但NAS的一次性remote/branch整理尚未执行；不得把GitHub分支创建写成NAS已经切换。
+- 2026-11-12已完成NAS Git跟踪关系整理：`origin`指向`SurgeXW0508/baibaoku`，`upstream`指向`baibai-git/baibaoku`，当前`personal/stable`跟踪`origin/personal/stable`，工作区clean。NAS HEAD为`4814830f`，原Runtime基线`b211a4e9`保留在`backup/pre-personal-stable-20261112`。本次只修改Git元数据并切换到文档提交，未更新Runtime或重启容器。
 
 ### 上游更新流程
 
@@ -320,9 +320,9 @@ Decision：三个仓库统一采用“上游同步镜像 → 独立审查 → �
 
 - SillyTavern：`upstream/release`保持官方同步，`release`承载个人生产代码。NAS使用飞牛OS正式管理的Compose项目`sillytavern`，固定GHCR Digest；更新时通过飞牛Compose GUI修改完整Digest并重新部署，不使用latest。
 - 柏宝箱：个人Fork的`main`只同步原作者，`personal/stable`是唯一部署分支。NAS的origin指向个人Fork，酒馆扩展管理器只更新当前分支对应的`origin/<branch>`，因此只有推进个人stable后才会提示生产更新。
-- 柏宝库：个人Fork已建立`main`与`personal/stable`，初始Runtime与上游`b211a4e9`等价。NAS仍处于原作者origin + detached HEAD；一次性remote/branch整理尚未执行。日常更新使用飞牛Docker容器终端中的定向Git更新，然后通过GUI重启容器；不使用会更新全部Server Plugins的全局脚本。
+- 柏宝库：个人Fork的`main`只同步原作者，`personal/stable`是唯一生产分支。NAS已完成一次性整理，`origin`指向个人Fork、`upstream`指向原作者，当前跟踪`origin/personal/stable`。日常更新使用飞牛Docker容器终端中的定向Git更新，然后通过GUI重启容器；不使用会更新全部Server Plugins的全局脚本。
 - 三仓库的详细安装、更新、依赖、重启、回滚步骤分别见[Release Operations](PERSONAL_RELEASE_OPERATIONS.md)、[柏宝箱 Runbook](https://github.com/SurgeXW0508/ST-BaiBai-Tools/blob/personal/stable/docs/PERSONAL_MAINTENANCE.md)和[柏宝库 Runbook](https://github.com/SurgeXW0508/baibaoku/blob/personal/stable/docs/PERSONAL_MAINTENANCE.md)。
 
 交接规则：凡Runtime修改完成实现、测试和审查后，必须说明变更是否已进入生产分支/Release、NAS当前与目标commit或Digest，并主动询问用户是否现在更新NAS。文档/测试-only变更明确说明无需更新Runtime。不得自动发布、切换Digest、更新插件、重启容器或修改生产数据；部署必须得到用户明确授权。
 
-Scope：本次只修改文档并在个人Fork创建柏宝库`personal/stable`分支；未修改任何Runtime源码、未运行构建或发布、未更新NAS、未执行柏宝库NAS分支切换。
+Scope（初始文档收口）：只修改文档并在个人Fork创建柏宝库`personal/stable`分支；未修改Runtime源码、未运行构建或发布。\n\nFollow-up（2026-11-12）：用户提供NAS执行结果，确认柏宝库已成功切换到个人Fork的`personal/stable`，并设置`origin`为个人仓库、`upstream`为原作者；工作区clean，保留原始Runtime备份分支。本次Git跟踪整理不改变Runtime，不需要重启。随后将当前NAS分支、备份分支和远端关系同步记录到Production Baseline与柏宝库Runbook。
