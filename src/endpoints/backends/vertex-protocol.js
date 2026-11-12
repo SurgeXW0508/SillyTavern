@@ -17,8 +17,22 @@ export class VertexError extends Error {
 const fail = message => { throw new VertexError('VERTEX_CONFIG', message, 400); };
 const object = value => value && typeof value === 'object' && !Array.isArray(value);
 export const isArgon = model => /^gemini-4-argon(?:-|$)/i.test(model);
+const isGemini4 = model => /^gemini-4(?:[.-]|$)/i.test(model);
 const modern = model => /^gemini-[34](?:[.-]|$)/i.test(model);
+const isNoSamplingModel = model => isArgon(model) || /gemini-3\.[678]-flash|gemini-3\.5-flash-lite/i.test(model);
+const rejectsPrefillModel = model => isArgon(model) || /gemini-3\.[678]-flash|gemini-3\.5-flash-lite/i.test(model);
 export const VERTEX_LIMITS = Object.freeze({ eventBytes: 32 * 1024 * 1024, responseBytes: 64 * 1024 * 1024, argumentBytes: 4 * 1024 * 1024, parts: 100000, calls: 1024 });
+
+function resolveThinkingLevel(model, maxTokens, effort) {
+    const normalized = effort === 'minimal' ? 'min' : effort;
+    if (!['min', 'low', 'medium', 'high', 'max'].includes(normalized)) return null;
+    if (isGemini4(model)) {
+        return { min: 'LOW', low: 'LOW', medium: 'MEDIUM', high: 'HIGH', max: 'HIGH' }[normalized];
+    }
+    const mapped = calculateGoogleBudgetTokens(maxTokens, normalized, model.toLowerCase());
+    if (typeof mapped === 'string') return mapped.toUpperCase();
+    return { min: 'LOW', low: 'LOW', medium: 'MEDIUM', high: 'HIGH', max: 'HIGH' }[normalized];
+}
 
 function choice(value, allowed, fallback, field) {
     if (value === undefined || value === null || value === '') return fallback;
@@ -31,11 +45,18 @@ export function vertexOptions(input) {
     if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/.test(model)) fail('Vertex 模型 ID 无效。');
     if (input.tools !== undefined && !Array.isArray(input.tools)) fail('tools 应为数组。');
     const argon = isArgon(model);
+    const omitSampling = isNoSamplingModel(model);
     if (input.n !== undefined && Number(input.n) !== 1) fail('Vertex Native only supports one candidate per request.');
     if (input.logprobs || input.top_logprobs || (input.logit_bias && Object.keys(input.logit_bias).length)) fail('Vertex Native does not support logprobs or logit bias.');
     if (argon && (Number(input.frequency_penalty || 0) !== 0 || Number(input.presence_penalty || 0) !== 0)) fail('Argon does not support frequency or presence penalties.');
     if (argon && Number(input.seed ?? -1) >= 0) fail('Argon seed control is not supported by this integration.');
-    const ignoredParameters = argon ? ['temperature', 'top_p', 'top_k'].filter(k => input[k] !== undefined) : [];
+    const ignoredParameters = omitSampling ? [
+        ...(input.temperature !== undefined ? ['temperature'] : []),
+        ...(input.top_p !== undefined ? ['top_p'] : []),
+        ...(Number(input.top_k) > 0 ? ['top_k'] : []),
+        ...(!argon && Number(input.frequency_penalty || 0) !== 0 ? ['frequency_penalty'] : []),
+        ...(!argon && Number(input.presence_penalty || 0) !== 0 ? ['presence_penalty'] : []),
+    ] : [];
     if (argon && !['global', 'us', 'eu'].includes(input.vertexai_region || 'global')) fail('Argon requires global, us or eu.');
     const tier = choice(input.vertexai_service_tier, ['auto', 'standard', 'priority', 'flex'], 'auto', '服务档位');
     const capacity = choice(input.vertexai_request_type, ['auto', 'shared', 'dedicated'], 'auto', '容量类型');
@@ -51,7 +72,7 @@ export function vertexOptions(input) {
     if (argon && version === 'v1' && autoContinue && max > (input.stream ? 65536 : 32768)) {
         fail('Argon 超长续传需要 v1beta1，请将 API 版本设为自动或 v1beta1。');
     }
-    return { model, argon, tier, capacity, max, timeoutMs: timeout * 1000, autoContinue,
+    return { model, argon, omitSampling, tier, capacity, max, timeoutMs: timeout * 1000, autoContinue,
         apiVersion: version === 'auto' ? (autoContinue ? 'v1beta1' : 'v1') : version,
         streamArguments: modern(model) && !/^gemini-3\.1-flash-lite/.test(model) && input.stream === true && input.vertexai_argument_streaming !== false,
         ignoredParameters,
@@ -63,21 +84,21 @@ export function buildVertexRequest(request, options = vertexOptions(request.body
     const input = request.body;
     if (!Array.isArray(input.messages) || !input.messages.length) fail('Vertex 请求需要非空消息列表。');
     const prompt = convertGooglePrompt(structuredClone(input.messages), options.model, !!input.use_sysprompt, getPromptNames(request), { nativeVertex: true });
-    const rejectsPrefill = options.argon || /gemini-3\.[678]-flash|gemini-3\.5-flash-lite/.test(options.model);
+    const rejectsPrefill = rejectsPrefillModel(options.model);
     if (rejectsPrefill && prompt.contents.at(-1)?.role === 'model') {
         if (input.type !== 'continue') fail('This model does not accept assistant prefill. Use Continue or end the history with a user/tool result.');
         prompt.contents.push({ role: 'user', parts: [{ text: 'Continue the previous assistant response from where it ended, without repeating it.' }] });
     }
     const config = { maxOutputTokens: options.max };
-    if (!options.argon) {
-        for (const [source, target] of [['temperature', 'temperature'], ['top_p', 'topP'], ['top_k', 'topK'], ['seed', 'seed']]) {
-            if (typeof input[source] === 'number' && Number.isFinite(input[source]) && !(source === 'seed' && input[source] < 0)) config[target] = input[source];
-        }
+    if (!options.omitSampling) {
+        if (typeof input.temperature === 'number' && Number.isFinite(input.temperature)) config.temperature = input.temperature;
+        if (typeof input.top_p === 'number' && Number.isFinite(input.top_p)) config.topP = input.top_p;
+        if (typeof input.top_k === 'number' && Number.isFinite(input.top_k) && input.top_k > 0) config.topK = input.top_k;
+        if (typeof input.frequency_penalty === 'number' && Number.isFinite(input.frequency_penalty) && input.frequency_penalty !== 0) config.frequencyPenalty = input.frequency_penalty;
+        if (typeof input.presence_penalty === 'number' && Number.isFinite(input.presence_penalty) && input.presence_penalty !== 0) config.presencePenalty = input.presence_penalty;
     }
-    if (!options.argon) {
-        for (const [source, target] of [['frequency_penalty', 'frequencyPenalty'], ['presence_penalty', 'presencePenalty']]) {
-            if (typeof input[source] === 'number' && Number.isFinite(input[source])) config[target] = input[source];
-        }
+    if (!options.argon && typeof input.seed === 'number' && Number.isFinite(input.seed) && input.seed >= 0) {
+        config.seed = input.seed;
     }
     if (input.stop !== undefined && (!Array.isArray(input.stop) || input.stop.length > 5 || input.stop.some(x => typeof x !== 'string' || !x.length || x.length > 512))) fail('Vertex stop sequences must be at most five non-empty strings.');
     if (Array.isArray(input.stop) && input.stop.length) config.stopSequences = input.stop;
@@ -88,9 +109,9 @@ export function buildVertexRequest(request, options = vertexOptions(request.body
         config.thinkingConfig = { includeThoughts: !!input.include_reasoning };
         const effort = input.reasoning_effort;
         if (effort && effort !== 'auto') {
-            const levels = { min: options.argon ? 'LOW' : (/pro/.test(options.model) ? 'LOW' : 'MINIMAL'), minimal: options.argon ? 'LOW' : 'MINIMAL', low: 'LOW', medium: 'MEDIUM', high: 'HIGH', max: 'HIGH' };
-            if (!levels[effort]) fail('此模型需要 auto、low、medium 或 high 思考档位。');
-            config.thinkingConfig.thinkingLevel = levels[effort];
+            const level = resolveThinkingLevel(options.model, options.max, effort);
+            if (!level) fail('此模型需要 auto、low、medium 或 high 思考档位。');
+            config.thinkingConfig.thinkingLevel = level;
         }
     } else if (/^gemini-2\.5-(?:flash|pro)/.test(options.model) && !/-image/.test(options.model)) {
         const budget = calculateGoogleBudgetTokens(options.max, input.reasoning_effort || 'auto', options.model);
@@ -100,9 +121,10 @@ export function buildVertexRequest(request, options = vertexOptions(request.body
     if (input.request_images) {
         if (options.argon) fail('Argon 返回文本，图像生成需要选择图像模型。');
         config.responseModalities = ['TEXT', 'IMAGE'];
-        config.imageConfig = {};
-        if (input.request_image_resolution) config.imageConfig.imageSize = input.request_image_resolution;
-        if (input.request_image_aspect_ratio) config.imageConfig.aspectRatio = input.request_image_aspect_ratio;
+        const imageConfig = {};
+        if (input.request_image_resolution && modern(options.model)) imageConfig.imageSize = input.request_image_resolution;
+        if (input.request_image_aspect_ratio) imageConfig.aspectRatio = input.request_image_aspect_ratio;
+        if (Object.keys(imageConfig).length) config.imageConfig = imageConfig;
     }
     const body = { contents: prompt.contents, generationConfig: config, safetySettings: [...GEMINI_SAFETY, ...VERTEX_SAFETY] };
     if (prompt.system_instruction.parts.length) body.systemInstruction = prompt.system_instruction;
@@ -137,6 +159,8 @@ export function buildVertexRequest(request, options = vertexOptions(request.body
         const thinking = body.generationConfig.thinkingConfig;
         if (thinking?.thinkingBudget !== undefined) fail('Argon 使用 thinkingLevel，不支持 thinkingBudget。');
         if (thinking?.thinkingLevel && !['LOW', 'MEDIUM', 'HIGH'].includes(thinking.thinkingLevel)) fail('Argon thinkingLevel 只支持 LOW、MEDIUM、HIGH。');
+    }
+    if (options.omitSampling) {
         for (const key of ['temperature', 'topP', 'topK', 'candidateCount', 'frequencyPenalty', 'presencePenalty']) delete body.generationConfig[key];
     }
     if (body.tools && !Array.isArray(body.tools)) fail('tools 应为数组。');

@@ -299,7 +299,64 @@ for (const terminal of ['continuation-error', 'max-tokens', 'failed']) test(`act
     expect(result.statuses).toEqual(failed ? [] : [200]);
     expect(result.message?.mes).toBe(failed ? undefined : 'Retained partial body.'); expect(result.message?.extra.reasoning).toBe(failed ? undefined : 'retained plan');
     expect(result.message?.extra.reasoning_signature).toBe(failed ? undefined : 'PARTIAL_SIG'); expect(result.message?.extra.vertex_generation.state).toBe(failed ? undefined : 'partial');
-    expect(result.message?.extra.vertex_response.parts).toEqual(failed ? undefined : parts);
     const saved = result.disk.find(m => m.extra?.vertex_generation);
+    expect(result.message?.extra.vertex_response.parts).toEqual(failed ? undefined : parts);
     expect(saved).toEqual(failed ? undefined : JSON.parse(JSON.stringify(result.message)));
 });
+
+for (const [mode, expectedDiagnostic] of [
+    ['sse-empty-error', '[RESOURCE_EXHAUSTED]'],
+    ['http-400', 'Invalid Vertex region.'],
+]) test(`native streaming ${mode} never saves an empty message and updates runtime diagnostics`, async ({ page }) => {
+    await page.unroute('**/api/chats/save');
+    const result = await page.evaluate(async mode => {
+        const st = await import('/script.js'), { oai_settings } = await import('/scripts/openai.js'), { power_user } = await import('/scripts/power-user.js');
+        await st.newAssistantChat({ temporary: true }); st.changeMainAPI('openai');
+        const file = `phasec-stream-err-${mode}-${crypto.randomUUID()}`;
+        const character = { name: 'StreamErrFixture', avatar: 'phasec-stream-err.png', chat: file, description: '', personality: '', scenario: '', first_mes: '', mes_example: '', data: { extensions: {} } };
+        st.characters.push(character); st.setCharacterId(st.characters.length - 1); st.setCharacterName(character.name);
+        Object.assign(oai_settings, { chat_completion_source: 'vertexai', vertexai_model: 'gemini-3.8-flash', stream_openai: true, function_calling: false,
+            show_thoughts: true, openai_max_context: 131072, openai_max_tokens: 2048, custom_prompt_post_processing: '' });
+        Object.assign(power_user, { message_token_count_enabled: false, auto_continue: false, auto_swipe: false, stream_fade_in: false });
+        st.setOnlineStatus('gemini-3.8-flash');
+        const user = { name: 'User', mes: 'Trigger failure', is_user: true, is_system: false, extra: {} }; st.chat.push(user); await st.addOneMessage(user);
+        let requests = 0, saves = 0;
+        const errorToasts = [];
+        const original = window.fetch, originalToastrError = window.toastr.error.bind(window.toastr);
+        window.toastr.error = (msg, title, opts) => { errorToasts.push(String(msg)); return originalToastrError(msg, title, opts); };
+        window.fetch = async (url, init) => {
+            if (url === '/api/backends/chat-completions/generate') {
+                requests++;
+                if (mode === 'http-400') {
+                    return new Response(JSON.stringify({
+                        vertexMeta: { phase: 'failed', state: 'failed' },
+                        error: { code: 'VERTEX_CONFIG', message: 'Invalid Vertex region.', status: 400 },
+                    }), { status: 400, headers: { 'Content-Type': 'application/json' } });
+                }
+                const sse = [
+                    `data: ${JSON.stringify({ vertexMeta: { phase: 'waiting_for_vertex', segments: 1 } })}\n\n`,
+                    `data: ${JSON.stringify({ vertexMeta: { phase: 'failed', state: 'failed' }, error: { code: 'VERTEX_HTTP', message: 'Vertex quota or capacity limit reached. [RESOURCE_EXHAUSTED]', status: 429 } })}\n\n`,
+                    'data: [DONE]\n\n',
+                ].join('');
+                return new Response(sse, { headers: { 'Content-Type': 'text/event-stream' } });
+            }
+            if (url === '/api/chats/save') saves++;
+            return original(url, init);
+        };
+        try {
+            await st.Generate('normal', { automatic_trigger: true }).catch(() => {});
+            const runtimeText = document.getElementById('vertexai_runtime')?.textContent || '';
+            return { requests, saves, errorToasts, runtimeText, persistedVertex: st.chat.some(m => Boolean(m.extra?.vertex_generation)) };
+        } finally {
+            window.fetch = original;
+            window.toastr.error = originalToastrError;
+        }
+    }, mode);
+    expect(result.requests).toBe(1);
+    expect(result.saves).toBe(0);
+    expect(result.persistedVertex).toBe(false);
+    expect(result.errorToasts).toHaveLength(1);
+    expect(result.errorToasts[0]).toContain(expectedDiagnostic);
+    expect(result.runtimeText).toContain(expectedDiagnostic);
+});
+

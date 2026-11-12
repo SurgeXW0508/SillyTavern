@@ -15,7 +15,34 @@ export function vertexHost(region) {
     return `https://${region}-aiplatform.googleapis.com`;
 }
 
-/** Bounded decoded bytes, used for both JSON success and error responses. */
+const ALLOWED_RPC_STATUSES = new Set([
+    'INVALID_ARGUMENT', 'FAILED_PRECONDITION', 'OUT_OF_RANGE', 'UNAUTHENTICATED',
+    'PERMISSION_DENIED', 'NOT_FOUND', 'ABORTED', 'ALREADY_EXISTS',
+    'RESOURCE_EXHAUSTED', 'CANCELLED', 'DATA_LOSS', 'UNKNOWN',
+    'INTERNAL', 'UNIMPLEMENTED', 'UNAVAILABLE', 'DEADLINE_EXCEEDED',
+]);
+
+const ALLOWED_ERROR_REASONS = new Set([
+    'API_KEY_INVALID', 'API_KEY_EXPIRED', 'API_KEY_HTTP_REFERRER_BLOCKED', 'API_KEY_IP_ADDRESS_BLOCKED',
+    'API_KEY_SERVICE_BLOCKED', 'ACCESS_TOKEN_EXPIRED', 'ACCESS_TOKEN_TYPE_UNSUPPORTED',
+    'ACCESS_TOKEN_SCOPE_INSUFFICIENT', 'CREDENTIALS_MISSING', 'ACCOUNT_STATE_INVALID',
+    'BILLING_DISABLED', 'SERVICE_DISABLED', 'CONSUMER_INVALID', 'CONSUMER_SUSPENDED',
+    'PROJECT_DELETED', 'PROJECT_INVALID', 'USER_PROJECT_DENIED', 'IAM_PERMISSION_DENIED',
+    'ORG_POLICY_VIOLATED', 'VPC_SERVICE_CONTROLS_BLOCKED', 'RATE_LIMIT_EXCEEDED',
+    'QUOTA_EXCEEDED', 'RESOURCE_USAGE_RESTRICTION_VIOLATED', 'OVERLOADED',
+    'MODEL_NOT_FOUND', 'PUBLISHER_MODEL_NOT_FOUND', 'LOCATION_INVALID',
+    'LOCATION_TAXONOMY_INVALID', 'REGION_NOT_SUPPORTED',
+]);
+
+export const ALLOWED_POLICY_REASONS = new Set([
+    'SAFETY', 'PROHIBITED_CONTENT', 'BLOCKLIST', 'SPII', 'OTHER', 'MODEL_ARMOR', 'JAILBREAK',
+    'RECITATION', 'MALFORMED_FUNCTION_CALL', 'UNEXPECTED_TOOL_CALL', 'TOO_MANY_TOOL_CALLS',
+    'IMAGE_SAFETY', 'IMAGE_PROHIBITED_CONTENT', 'IMAGE_RECITATION', 'IMAGE_OTHER', 'NO_IMAGE', 'LANGUAGE',
+]);
+
+const ALLOWED_FIELD_PATH = /^(?:generationConfig|thinkingConfig|toolConfig|tools|systemInstruction|contents|safetySettings|model|labels|cachedContent)(?:\.[a-z][a-zA-Z0-9_]{0,48}|\[\d{1,4}\]){0,8}$/;
+
+/** Bounded decoded bytes, used for JSON success responses. */
 export async function readVertexJson(response, limit = 65536) {
     const chunks = [];
     let bytes = 0;
@@ -32,11 +59,63 @@ export async function readVertexJson(response, limit = 65536) {
     }
 }
 
-export function vertexHttpError(status, apiStatus) {
+/** Safely read at most 16 KiB from an HTTP error body to extract structured RPC enums; never throws. */
+export async function readVertexErrorEnvelope(response, limit = 16384) {
+    const chunks = [];
+    let bytes = 0;
+    try {
+        for await (const chunk of response?.body || []) {
+            const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+            bytes += buffer.length;
+            if (bytes > limit) return null;
+            chunks.push(buffer);
+        }
+        if (!bytes) return null;
+        const parsed = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+        const envelope = Array.isArray(parsed) ? parsed[0]?.error : parsed?.error;
+        return envelope && typeof envelope === 'object' && !Array.isArray(envelope) ? envelope : null;
+    } catch {
+        return null;
+    } finally {
+        response?.body?.destroy?.();
+    }
+}
+
+function extractVertexErrorDiagnostics(envelope) {
+    if (!envelope || typeof envelope !== 'object' || Array.isArray(envelope)) return { apiStatus: undefined, tags: [] };
+    // Never inspect envelope.message or fieldViolations[].description, which can echo prompts/keys/URLs.
+    const apiStatus = typeof envelope.status === 'string' && ALLOWED_RPC_STATUSES.has(envelope.status) ? envelope.status : undefined;
+    const tags = apiStatus ? [apiStatus] : [];
+    const details = Array.isArray(envelope.details) ? envelope.details.slice(0, 16) : [];
+    let reason;
+    const fields = [];
+    for (const item of details) {
+        if (!item || typeof item !== 'object') continue;
+        if (!reason && typeof item.reason === 'string' && ALLOWED_ERROR_REASONS.has(item.reason)) {
+            reason = item.reason;
+        }
+        if (Array.isArray(item.fieldViolations)) {
+            for (const violation of item.fieldViolations) {
+                const field = violation?.field;
+                if (typeof field === 'string' && ALLOWED_FIELD_PATH.test(field) && !fields.includes(field) && fields.length < 3) {
+                    fields.push(field);
+                }
+            }
+        }
+    }
+    if (reason && !tags.includes(reason)) tags.push(reason);
+    for (const field of fields) tags.push(field);
+    return { apiStatus, tags };
+}
+
+export function vertexHttpError(status, detail) {
     const messages = { 400: 'Vertex rejected the request or model parameters.', 401: 'Vertex authentication failed.', 403: 'Vertex denied access to this model or project.',
         404: 'Vertex model or location was not found.', 429: 'Vertex quota or capacity limit reached.', 503: 'Vertex is temporarily unavailable.' };
-    const error = new VertexError('VERTEX_HTTP', messages[status] || `Vertex returned HTTP ${Number(status) || 502}.`, Number(status) || 502);
-    if (/^[A-Z_]{1,64}$/.test(apiStatus)) error.apiStatus = apiStatus;
+    const envelope = typeof detail === 'string' ? { status: detail } : detail;
+    const { apiStatus, tags } = extractVertexErrorDiagnostics(envelope);
+    const base = messages[status] || `Vertex returned HTTP ${Number(status) || 502}.`;
+    const error = new VertexError('VERTEX_HTTP', tags.length ? `${base} [${tags.join(' · ')}]` : base, Number(status) || 502);
+    if (apiStatus) error.apiStatus = apiStatus;
     return error;
 }
 

@@ -4,7 +4,7 @@ import fetch from 'node-fetch';
 import { postProcessPrompt, getPromptNames } from '../../prompt-converters.js';
 import { flattenSchema } from '../../util.js';
 import { VertexError, VERTEX_LIMITS, vertexOptions, buildVertexRequest, readVertexSse, VertexFunctionStream } from './vertex-protocol.js';
-import { resolveVertexConnection, readVertexJson, vertexHttpError } from './vertex-transport.js';
+import { resolveVertexConnection, readVertexJson, readVertexErrorEnvelope, vertexHttpError, ALLOWED_POLICY_REASONS } from './vertex-transport.js';
 
 const usageKeys = ['promptTokenCount', 'candidatesTokenCount', 'thoughtsTokenCount', 'cachedContentTokenCount', 'totalTokenCount', 'toolUsePromptTokenCount'];
 
@@ -73,8 +73,8 @@ export function createVertexGeneration({ fetchImpl = fetch, resolveConnection = 
                     agent: connection.agent, signal, body: JSON.stringify(continuation ? { ...body, continuationToken: continuation } : body) });
                 if (!remote.ok) {
                     if (remote.status === 401) connection.invalidate?.();
-                    remote.body?.destroy();
-                    throw vertexHttpError(remote.status);
+                    const errorEnvelope = await readVertexErrorEnvelope(remote);
+                    throw vertexHttpError(remote.status, errorEnvelope);
                 }
                 phase = 'receiving';
                 let latestUsage = {}, candidateToken, candidateReason;
@@ -82,8 +82,11 @@ export function createVertexGeneration({ fetchImpl = fetch, resolveConnection = 
                     if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new VertexError('VERTEX_INVALID_RESPONSE', 'Invalid Vertex response envelope.');
                     receivedBytes += Buffer.byteLength(JSON.stringify(raw));
                     if (receivedBytes > VERTEX_LIMITS.responseBytes) throw new VertexError('VERTEX_RESPONSE_LIMIT', 'Vertex generation exceeds the safety limit.');
-                    if (raw.error) throw vertexHttpError(Number(raw.error.code) || 502, raw.error.status);
-                    if (raw.promptFeedback?.blockReason) throw new VertexError('VERTEX_BLOCKED', 'Vertex blocked this prompt.', 400);
+                    if (raw.error) throw vertexHttpError(Number(raw.error.code) || 502, raw.error);
+                    if (raw.promptFeedback?.blockReason) {
+                        const blockTag = ALLOWED_POLICY_REASONS.has(raw.promptFeedback.blockReason) ? ` [${raw.promptFeedback.blockReason}]` : '';
+                        throw new VertexError('VERTEX_BLOCKED', `Vertex blocked this prompt.${blockTag}`, 400);
+                    }
                     for (const [key, value] of Object.entries(raw)) if (!['candidates', 'usageMetadata', 'continuationToken'].includes(key)) nativeMetadata[key] = structuredClone(value);
                     if (raw.usageMetadata) latestUsage = raw.usageMetadata;
                     if (raw.candidates && (!Array.isArray(raw.candidates) || raw.candidates.length > 1 || raw.candidates.some(c => (c.index ?? 0) !== 0))) throw new VertexError('VERTEX_INVALID_RESPONSE', 'Expected one Vertex candidate.');
@@ -120,8 +123,16 @@ export function createVertexGeneration({ fetchImpl = fetch, resolveConnection = 
             } while (continuation);
             if (converter.active.size) throw new VertexError('VERTEX_INCOMPLETE_FUNCTION', 'Vertex ended with incomplete function arguments.');
             if (!finishReason) throw new VertexError('VERTEX_INCOMPLETE_STREAM', 'Vertex ended without a model finish marker.');
-            if (!['STOP', 'MAX_TOKENS'].includes(finishReason)) throw new VertexError('VERTEX_FINISH', 'Vertex did not complete the response normally.');
-            if (!converter.visibleChars && !converter.completed) throw new VertexError('VERTEX_EMPTY', 'Vertex returned no visible text, image or complete tool call.');
+            if (!['STOP', 'MAX_TOKENS'].includes(finishReason)) {
+                const finishTag = ALLOWED_POLICY_REASONS.has(finishReason) ? ` [${finishReason}]` : '';
+                throw new VertexError('VERTEX_FINISH', `Vertex did not complete the response normally.${finishTag}`);
+            }
+            if (!converter.visibleChars && !converter.completed) {
+                const thoughtOnly = parts.some(p => p.thought && typeof p.text === 'string' && p.text.trim().length > 0);
+                throw new VertexError('VERTEX_EMPTY', thoughtOnly
+                    ? 'Vertex returned reasoning thoughts only, without visible response text.'
+                    : 'Vertex returned no visible text, image or complete tool call.');
+            }
             signal.throwIfAborted();
         } catch (caught) {
             error = signal.aborted && controller.signal.reason !== 'deadline'

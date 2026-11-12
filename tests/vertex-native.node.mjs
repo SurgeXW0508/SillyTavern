@@ -10,7 +10,8 @@ setConfigFilePath(fileURLToPath(new URL('../default/config.yaml', import.meta.ur
 const { vertexOptions, buildVertexRequest, readVertexSse, VertexFunctionStream, VERTEX_LIMITS } = await import('../src/endpoints/backends/vertex-protocol.js');
 const { createVertexGeneration, createVertexHandler, vertexResultFrame } = await import('../src/endpoints/backends/vertex-native.js');
 const { createVertexConnectionResolver, vertexHost } = await import('../src/endpoints/backends/vertex-transport.js');
-const { appendVertexParts, vertexResponseRecord, applyVertexMessageState, reusableVertexResponse, vertexToolHistory, isUsableVertexPartial } = await import('../public/scripts/vertex-state.js');
+const { appendVertexParts, vertexResponseRecord, applyVertexMessageState, reusableVertexResponse, vertexToolHistory, isUsableVertexPartial, hasUsableVertexParts } = await import('../public/scripts/vertex-state.js');
+const { updateVertexRuntime, formatVertexUsage, resetVertexRuntime } = await import('../public/scripts/vertex-ui.js');
 const base = { model: 'gemini-4-argon', stream: true, chat_completion_source: 'vertexai', max_tokens: 131072,
     messages: [{ role: 'user', content: 'PRIVATE_PROMPT' }], include_reasoning: true, reasoning_effort: 'low' };
 const context = (overrides = {}) => ({ body: structuredClone({ ...base, ...overrides }), user: { directories: { root: '/unused/vertex-contract' } } });
@@ -331,3 +332,164 @@ test('a downstream that stops reading has a bounded drain wait, including after 
     await blocked; t.mock.timers.tick(10); await running;
     assert.equal(res.destroyed, true); assert.equal(res.listenerCount('drain'), 0); assert.equal(req.listenerCount('aborted'), 0);
 });
+
+test('Gemini 2.5/3.x/4 capability matrix omits disabled sampling/penalties, maps thinking levels, and guards imageSize', () => {
+    const standardZero = buildVertexRequest(context({ model: 'gemini-2.5-pro', temperature: 0.9, top_p: 0.95, top_k: 0, frequency_penalty: 0, presence_penalty: 0, seed: 7 }));
+    assert.equal(standardZero.generationConfig.temperature, 0.9);
+    assert.equal(standardZero.generationConfig.topP, 0.95);
+    assert.equal(standardZero.generationConfig.topK, undefined);
+    assert.equal(standardZero.generationConfig.frequencyPenalty, undefined);
+    assert.equal(standardZero.generationConfig.presencePenalty, undefined);
+    assert.equal(standardZero.generationConfig.seed, 7);
+
+    const standardActive = buildVertexRequest(context({ model: 'gemini-2.5-pro', top_k: 40, frequency_penalty: 0.3, presence_penalty: -0.2 }));
+    assert.equal(standardActive.generationConfig.topK, 40);
+    assert.equal(standardActive.generationConfig.frequencyPenalty, 0.3);
+    assert.equal(standardActive.generationConfig.presencePenalty, -0.2);
+
+    for (const model of ['gemini-3.6-flash', 'gemini-3.7-flash', 'gemini-3.8-flash', 'gemini-3.5-flash-lite']) {
+        const noSamplingInput = context({ model, temperature: 1, top_p: 0.9, top_k: 20, frequency_penalty: 0.5, presence_penalty: 0.25, seed: 11, reasoning_effort: 'min' });
+        const opts = vertexOptions(noSamplingInput.body);
+        const built = buildVertexRequest(noSamplingInput, opts);
+        assert.deepEqual(opts.ignoredParameters, ['temperature', 'top_p', 'top_k', 'frequency_penalty', 'presence_penalty']);
+        for (const key of ['temperature', 'topP', 'topK', 'frequencyPenalty', 'presencePenalty']) assert.equal(built.generationConfig[key], undefined);
+        assert.equal(built.generationConfig.seed, 11);
+        const expectedMin = /gemini-3\.[78]-flash/.test(model) ? 'LOW' : 'MINIMAL';
+        assert.equal(built.generationConfig.thinkingConfig.thinkingLevel, expectedMin);
+        const prefillMessages = [{ role: 'user', content: 'hi' }, { role: 'assistant', content: 'prefill' }];
+        assert.throws(() => buildVertexRequest(context({ model, messages: prefillMessages })), /prefill/);
+        const continued = buildVertexRequest(context({ model, messages: prefillMessages, type: 'continue' }));
+        assert.equal(continued.contents.at(-1).role, 'user');
+    }
+
+    assert.equal(buildVertexRequest(context({ model: 'gemini-3.1-pro-preview', reasoning_effort: 'medium' })).generationConfig.thinkingConfig.thinkingLevel, 'LOW');
+    assert.equal(buildVertexRequest(context({ model: 'gemini-3.1-pro-preview', reasoning_effort: 'high' })).generationConfig.thinkingConfig.thinkingLevel, 'HIGH');
+
+    const legacyImage = buildVertexRequest(context({ model: 'gemini-2.5-flash-image', request_images: true, request_image_resolution: '2K' }));
+    assert.deepEqual(legacyImage.generationConfig.responseModalities, ['TEXT', 'IMAGE']);
+    assert.equal(legacyImage.generationConfig.imageConfig, undefined);
+    const legacyAspect = buildVertexRequest(context({ model: 'gemini-2.5-flash-image', request_images: true, request_image_resolution: '2K', request_image_aspect_ratio: '16:9' }));
+    assert.deepEqual(legacyAspect.generationConfig.imageConfig, { aspectRatio: '16:9' });
+});
+
+test('structured RPC error allowlists surface safe codes/fields without echoing secrets, URLs or oversized bodies', async () => {
+    const rpcPayload = [{
+        error: {
+            code: 400,
+            status: 'INVALID_ARGUMENT',
+            message: 'PRIVATE_PROMPT rejected at https://secret.invalid with PRIVATE_KEY',
+            details: [
+                { '@type': 'type.googleapis.com/google.rpc.ErrorInfo', reason: 'API_KEY_INVALID', metadata: { secret: 'PRIVATE_KEY' } },
+                {
+                    '@type': 'type.googleapis.com/google.rpc.BadRequest',
+                    fieldViolations: [
+                        { field: 'generationConfig.topK', description: 'PRIVATE_PROMPT in description' },
+                        { field: 'contents[0].parts[0].text', description: 'valid path' },
+                        { field: 'unrootedSecretField', description: 'must be ignored' },
+                        { field: 'generationConfig.PRIVATE_KEY', description: 'uppercase segment rejected' },
+                    ],
+                },
+            ],
+        },
+    }];
+    let calls = 0;
+    const httpErr = await run(async () => { calls++; return new Response(JSON.stringify(rpcPayload), { status: 400 }); });
+    assert.equal(calls, 1);
+    assert.equal(httpErr.state, 'failed');
+    assert.equal(httpErr.error.apiStatus, 'INVALID_ARGUMENT');
+    assert.match(httpErr.error.message, /\[INVALID_ARGUMENT · API_KEY_INVALID · generationConfig\.topK · contents\[0\]\.parts\[0\]\.text\]/);
+    const serialized = JSON.stringify(httpErr);
+    assert.ok(!serialized.includes('PRIVATE_'));
+    assert.ok(!serialized.includes('secret.invalid'));
+    assert.ok(!serialized.includes('unrootedSecretField'));
+
+    const roguePayload = { error: { code: 403, status: 'PRIVATE_STATUS', message: 'PRIVATE_PROMPT', details: [{ reason: 'PRIVATE_REASON' }] } };
+    const rogue = await run(async () => new Response(JSON.stringify(roguePayload), { status: 403 }));
+    assert.equal(rogue.error.message, 'Vertex denied access to this model or project.');
+    assert.ok(!JSON.stringify(rogue).includes('PRIVATE_'));
+
+    const oversized = await run(async () => new Response('{"error":{"status":"INVALID_ARGUMENT","pad":"' + 'x'.repeat(20000) + '"}}', { status: 429 }));
+    assert.equal(oversized.error.message, 'Vertex quota or capacity limit reached.');
+
+    const blocked = await run(async () => upstream([{ promptFeedback: { blockReason: 'PROHIBITED_CONTENT', blockReasonMessage: 'PRIVATE_PROMPT' } }]));
+    assert.equal(blocked.error.code, 'VERTEX_BLOCKED');
+    assert.equal(blocked.error.message, 'Vertex blocked this prompt. [PROHIBITED_CONTENT]');
+    assert.ok(!JSON.stringify(blocked).includes('PRIVATE_'));
+
+    const rogueBlocked = await run(async () => upstream([{ promptFeedback: { blockReason: 'PRIVATE_REASON' } }]));
+    assert.equal(rogueBlocked.error.message, 'Vertex blocked this prompt.');
+    assert.ok(!JSON.stringify(rogueBlocked).includes('PRIVATE_'));
+
+    const safetyFinish = await run(async () => upstream([candidate([{ text: 'partial' }], 'RECITATION')]));
+    assert.equal(safetyFinish.error.code, 'VERTEX_FINISH');
+    assert.equal(safetyFinish.error.message, 'Vertex did not complete the response normally. [RECITATION]');
+
+    const thoughtOnly = await run(async () => upstream([candidate([{ thought: true, text: 'internal reasoning' }], 'STOP')]));
+    assert.equal(thoughtOnly.state, 'partial');
+    assert.equal(thoughtOnly.error.code, 'VERTEX_EMPTY');
+    assert.match(thoughtOnly.error.message, /reasoning thoughts only/);
+
+    const trulyEmpty = await run(async () => upstream([candidate([], 'STOP')]));
+    assert.equal(trulyEmpty.state, 'failed');
+    assert.equal(trulyEmpty.error.code, 'VERTEX_EMPTY');
+    assert.match(trulyEmpty.error.message, /no visible text/);
+});
+
+test('hasUsableVertexParts and updateVertexRuntime handle empty failures, live wait timers, and cache/token breakdown cleanly', t => {
+    assert.equal(hasUsableVertexParts([]), false);
+    assert.equal(hasUsableVertexParts(null), false);
+    assert.equal(hasUsableVertexParts([{ text: '' }, { functionCall: { name: 'lookup', args: {} } }]), false);
+    assert.equal(hasUsableVertexParts([{ text: 'hello' }]), true);
+    assert.equal(hasUsableVertexParts([{ thought: true, text: 'plan' }]), true);
+    assert.equal(hasUsableVertexParts([{ inlineData: { data: 'aGVsbG8=' } }]), true);
+
+    assert.equal(formatVertexUsage({ totalTokenCount: 42 }), '42 tokens');
+    assert.equal(formatVertexUsage({ promptTokenCount: 1000, cachedContentTokenCount: 750, thoughtsTokenCount: 200, candidatesTokenCount: 150, totalTokenCount: 1350 }),
+        '输入 1000 (缓存 750, 75%) / 思考 200 / 输出 150 (1350 tokens)');
+
+    t.mock.timers.enable({ apis: ['setInterval', 'Date'] });
+    const node = { textContent: '' };
+    const previousDoc = globalThis.document;
+    globalThis.document = { getElementById: id => (id === 'vertexai_runtime' ? node : null) };
+    try {
+        updateVertexRuntime(null);
+        assert.equal(node.textContent, '正在连接…');
+        t.mock.timers.tick(3000);
+        assert.equal(node.textContent, '正在连接… · 3s');
+
+        updateVertexRuntime({ vertexMeta: { phase: 'waiting_for_vertex', segments: 1, ignoredParameters: ['temperature'] } });
+        assert.equal(node.textContent, '等待 Vertex · 3s · 模型忽略：temperature');
+        t.mock.timers.tick(2000);
+        assert.equal(node.textContent, '等待 Vertex · 5s · 模型忽略：temperature');
+
+        updateVertexRuntime({ candidates: [{ content: { parts: [{ text: 'chunk' }] } }] });
+        assert.equal(node.textContent, '接收正文 · 模型忽略：temperature');
+        t.mock.timers.tick(5000);
+        assert.equal(node.textContent, '接收正文 · 模型忽略：temperature');
+
+        updateVertexRuntime({ vertexMeta: { phase: 'continuation', segments: 2 } });
+        t.mock.timers.tick(2000);
+        assert.equal(node.textContent, '正在续传 · 2s · 2 段 · 模型忽略：temperature');
+
+        updateVertexRuntime({
+            vertexMeta: { phase: 'completed', state: 'completed', segments: 2, elapsedMs: 4200, ignoredParameters: ['temperature'] },
+            usageMetadata: { promptTokenCount: 2000, cachedContentTokenCount: 1000, thoughtsTokenCount: 300, candidatesTokenCount: 250, totalTokenCount: 2550, trafficType: 'ON_DEMAND' },
+        });
+        const finalStatus = node.textContent;
+        assert.equal(finalStatus, '已完成 · 4.2s · ON_DEMAND · 2 段 · 输入 2000 (缓存 1000, 50%) / 思考 300 / 输出 250 (2550 tokens) · 模型忽略：temperature');
+        t.mock.timers.tick(10000);
+        assert.equal(node.textContent, finalStatus);
+
+        updateVertexRuntime(null);
+        t.mock.timers.tick(2000);
+        assert.equal(node.textContent, '正在连接… · 2s');
+        updateVertexRuntime({ vertexMeta: { state: 'failed' }, error: { message: 'Vertex quota or capacity limit reached. [RESOURCE_EXHAUSTED]' } });
+        assert.equal(node.textContent, 'Vertex quota or capacity limit reached. [RESOURCE_EXHAUSTED]');
+        t.mock.timers.tick(5000);
+        assert.equal(node.textContent, 'Vertex quota or capacity limit reached. [RESOURCE_EXHAUSTED]');
+    } finally {
+        resetVertexRuntime();
+        globalThis.document = previousDoc;
+    }
+});
+

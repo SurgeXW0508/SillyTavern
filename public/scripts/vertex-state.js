@@ -1,7 +1,10 @@
 // Core response/history helpers. Signatures stay attached to their Parts.
+export function hasUsableVertexParts(parts) {
+    return Array.isArray(parts) && parts.some(p => (typeof p?.text === 'string' && p.text.length > 0) || Boolean(p?.inlineData?.data));
+}
+
 export function isUsableVertexPartial(data) {
-    return data?.vertexMeta?.state === 'partial' && Array.isArray(data.responseContent?.parts)
-        && data.responseContent.parts.some(p => (typeof p.text === 'string' && p.text.length > 0) || p.inlineData?.data);
+    return data?.vertexMeta?.state === 'partial' && hasUsableVertexParts(data.responseContent?.parts);
 }
 
 export function appendVertexParts(target, parts) {

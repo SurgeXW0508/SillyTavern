@@ -47,7 +47,7 @@ import { forceCharacterEditorTokenize, getCustomStoppingStrings, persona_descrip
 import { SECRET_KEYS, secret_state, writeSecret } from './secrets.js';
 
 import { getEventSourceStream } from './sse-stream.js';
-import { appendVertexParts, vertexResponseRecord, reusableVertexResponse, vertexToolResponse, vertexToolHistory, isUsableVertexPartial } from './vertex-state.js';
+import { appendVertexParts, vertexResponseRecord, reusableVertexResponse, vertexToolResponse, vertexToolHistory, isUsableVertexPartial, hasUsableVertexParts } from './vertex-state.js';
 import { vertexDefaults, vertexSettingsMap, initVertexUI, updateVertexRuntime } from './vertex-ui.js';
 import {
     clamp,
@@ -3163,18 +3163,42 @@ async function sendOpenAIRequest(type, messages, signal, { jsonSchema = null } =
     await eventSource.emit(event_types.CHAT_COMPLETION_SETTINGS_READY, generate_data);
 
     const nativeVertex = generate_data.chat_completion_source === chat_completion_sources.VERTEXAI;
+    const isQuiet = type === 'quiet';
     if (nativeVertex) updateVertexRuntime(null);
     const generate_url = '/api/backends/chat-completions/generate';
-    const response = await fetch(generate_url, {
-        method: 'POST',
-        body: JSON.stringify(generate_data),
-        headers: getRequestHeaders(),
-        signal: signal,
-    });
+    let response;
+    try {
+        response = await fetch(generate_url, {
+            method: 'POST',
+            body: JSON.stringify(generate_data),
+            headers: getRequestHeaders(),
+            signal: signal,
+        });
+    } catch (err) {
+        if (nativeVertex) {
+            updateVertexRuntime(signal.aborted
+                ? { vertexMeta: { phase: 'canceled', state: 'canceled' } }
+                : { error: { message: '网络连接中断或无法连接后端' } });
+        }
+        throw err;
+    }
 
     if (!response.ok) {
-        tryParseStreamingError(response, await response.text());
-        throw new Error(`Got response status ${response.status}`);
+        const errorText = await response.text();
+        let parsedError = null;
+        try {
+            parsedError = JSON.parse(errorText);
+        } catch {
+            // Non-JSON error body; handled below.
+        }
+        if (nativeVertex) {
+            updateVertexRuntime(parsedError?.error ? parsedError : { error: { message: `HTTP ${response.status}` } });
+        }
+        tryParseStreamingError(response, errorText, { quiet: isQuiet });
+        const detail = parsedError && (parsedError.error || parsedError.detail || parsedError.message)
+            ? (typeof parsedError.message === 'string' && !parsedError.error && !parsedError.detail ? parsedError.message : getChatCompletionErrorMessage(parsedError, response))
+            : `Got response status ${response.status}`;
+        throw new Error(detail);
     }
     if (stream) {
         const eventStream = getEventSourceStream();
@@ -3186,6 +3210,7 @@ async function sendOpenAIRequest(type, messages, signal, { jsonSchema = null } =
             const toolCalls = [];
             const state = { reasoning: '', images: [], signature: '', toolSignatures: {}, ...(nativeVertex ? { vertexResponse: vertexResponseRecord([], model), vertexMeta: {} } : {}) };
             let vertexTerminal = false;
+            let vertexNotified = false;
             try {
                 while (true) {
                     const { done, value } = await reader.read();
@@ -3206,13 +3231,25 @@ async function sendOpenAIRequest(type, messages, signal, { jsonSchema = null } =
                         if (parsed.vertexEnvelope) state.vertexResponse.envelope = structuredClone(parsed.vertexEnvelope);
                         vertexTerminal ||= ['completed', 'partial', 'failed', 'canceled'].includes(parsed.vertexMeta?.state);
                         if (parsed.error) {
-                            yield { text, swipes, toolCalls, state };
-                            throw new Error(getChatCompletionErrorMessage(parsed, response));
+                            const message = getChatCompletionErrorMessage(parsed, response);
+                            const partial = hasUsableVertexParts(state.vertexResponse.parts);
+                            vertexNotified = true;
+                            if (partial) {
+                                if (!isQuiet) toastr.warning(parsed.vertexMeta?.warning || message, t`Vertex response incomplete`);
+                                yield { text, swipes, toolCalls, state };
+                            } else if (!isQuiet) {
+                                toastr.error(message, t`API returned an error`);
+                            }
+                            throw new Error(message);
+                        }
+                        if (parsed.vertexMeta?.state === 'partial' && parsed.vertexMeta?.warning && !isQuiet && !vertexNotified) {
+                            vertexNotified = true;
+                            toastr.warning(parsed.vertexMeta.warning, t`Vertex response incomplete`);
                         }
                     }
 
                     if (nativeVertex && !parsed.candidates?.some(c => c.content?.parts?.length) && !parsed.vertexMeta?.state) continue;
-                    tryParseStreamingError(response, rawData);
+                    tryParseStreamingError(response, rawData, { quiet: isQuiet });
                     if (canMultiSwipe && Array.isArray(parsed?.choices) && parsed?.choices?.[0]?.index > 0) {
                         const swipeIndex = parsed.choices[0].index - 1;
                         // FIXME: state.reasoning should be an array to support multi-swipe
@@ -3225,28 +3262,60 @@ async function sendOpenAIRequest(type, messages, signal, { jsonSchema = null } =
 
                     yield { text, swipes: swipes, logprobs: parseChatCompletionLogprobs(parsed), toolCalls: toolCalls, state: state };
                 }
+            } catch (streamErr) {
+                if (nativeVertex && !vertexTerminal) {
+                    vertexTerminal = true;
+                    if (signal.aborted) {
+                        updateVertexRuntime({ vertexMeta: { phase: 'canceled', state: 'canceled' } });
+                    } else {
+                        const partial = hasUsableVertexParts(state.vertexResponse.parts);
+                        const errMsg = streamErr instanceof Error && streamErr.message ? streamErr.message : 'Vertex stream interrupted.';
+                        updateVertexRuntime({ vertexMeta: { state: partial ? 'partial' : 'failed', phase: partial ? 'partial' : 'failed' }, error: { message: errMsg } });
+                        if (!isQuiet && !vertexNotified) {
+                            vertexNotified = true;
+                            if (partial) toastr.warning(errMsg, t`Vertex response incomplete`);
+                            else toastr.error(errMsg, t`API returned an error`);
+                        }
+                    }
+                }
+                throw streamErr;
             } finally {
+                if (nativeVertex && !vertexTerminal) {
+                    updateVertexRuntime(signal.aborted
+                        ? { vertexMeta: { phase: 'canceled', state: 'canceled' } }
+                        : { vertexMeta: { phase: 'completed', state: 'completed' } });
+                }
                 await reader.cancel().catch(() => {});
                 reader.releaseLock();
             }
         };
     } else {
-        const data = await response.json();
+        let data;
+        try {
+            data = await response.json();
+        } catch (err) {
+            if (nativeVertex) {
+                updateVertexRuntime(signal.aborted
+                    ? { vertexMeta: { phase: 'canceled', state: 'canceled' } }
+                    : { error: { message: 'Vertex 返回了无效响应' } });
+            }
+            throw err;
+        }
         if (nativeVertex) updateVertexRuntime(data);
 
-        checkQuotaError(data);
-        checkModerationError(data);
+        checkQuotaError(data, { quiet: isQuiet });
+        checkModerationError(data, { quiet: isQuiet });
 
         const partial = nativeVertex && isUsableVertexPartial(data);
         if (data.error && !partial) {
             const message = getChatCompletionErrorMessage(data, response);
-            toastr.error(message, t`API returned an error`);
+            if (!isQuiet) toastr.error(message, t`API returned an error`);
             throw new Error(message);
         }
 
-        if (partial) toastr.warning(data.vertexMeta.warning || data.error?.message || t`The response is incomplete. Available content has been retained.`, t`Vertex response incomplete`);
+        if (partial && !isQuiet) toastr.warning(data.vertexMeta.warning || data.error?.message || t`The response is incomplete. Available content has been retained.`, t`Vertex response incomplete`);
 
-        if (type !== 'quiet') {
+        if (!isQuiet) {
             const logprobs = parseChatCompletionLogprobs(data);
             // Delay is required to allow the active message to be updated to
             // the one we are generating (happens right after sendOpenAIRequest)
@@ -5189,7 +5258,7 @@ function getGeminiMaxContext(model, isUnlocked) {
 
     /** @type {[RegExp, number][]} */
     const contextMap = [
-        [/gemini-4-argon/, 1048576],
+        [/gemini-4(?:[.-]|$)/, 1048576],
         [/gemini-2\.5-flash-image/, max_32k],
         [/gemini-3\.1-flash-image/, max_128k],
         [/gemini-3-pro-image/, max_64k],
@@ -6230,7 +6299,8 @@ async function testApiConnection() {
         console.log(reply);
         toastr.success(t`API connection successful!`);
     } catch (err) {
-        toastr.error(t`Could not get a reply from API. Check your connection settings / API key and try again.`);
+        const detail = err instanceof Error && err.message && !/^Got response status \d+$/.test(err.message) ? err.message : '';
+        toastr.error(detail || t`Could not get a reply from API. Check your connection settings / API key and try again.`, t`API connection failed`);
     }
 }
 
@@ -6363,7 +6433,7 @@ export function isImageInliningSupported() {
         case chat_completion_sources.MAKERSUITE:
             return visionSupportedModels.some(model => oai_settings.google_model.includes(model));
         case chat_completion_sources.VERTEXAI:
-            return /^gemini-4-argon(?:-|$)/.test(oai_settings.vertexai_model) || visionSupportedModels.some(model => oai_settings.vertexai_model.includes(model));
+            return /^gemini-4(?:[.-]|$)/.test(oai_settings.vertexai_model) || visionSupportedModels.some(model => oai_settings.vertexai_model.includes(model));
         case chat_completion_sources.CLAUDE:
             return visionSupportedModels.some(model => oai_settings.claude_model.includes(model));
         case chat_completion_sources.OPENROUTER:
@@ -6438,7 +6508,7 @@ export function isVideoInliningSupported() {
         case chat_completion_sources.MAKERSUITE:
             return videoSupportedModels.some(model => oai_settings.google_model.includes(model));
         case chat_completion_sources.VERTEXAI:
-            return /^gemini-4-argon(?:-|$)/.test(oai_settings.vertexai_model) || videoSupportedModels.some(model => oai_settings.vertexai_model.includes(model));
+            return /^gemini-4(?:[.-]|$)/.test(oai_settings.vertexai_model) || videoSupportedModels.some(model => oai_settings.vertexai_model.includes(model));
         case chat_completion_sources.OPENROUTER:
             return (Array.isArray(model_list) && model_list.find(m => m.id === oai_settings.openrouter_model)?.architecture?.input_modalities?.includes('video'));
         case chat_completion_sources.ZAI:
@@ -6480,7 +6550,7 @@ export function isAudioInliningSupported() {
         case chat_completion_sources.MAKERSUITE:
             return audioSupportedModels.some(model => oai_settings.google_model.includes(model));
         case chat_completion_sources.VERTEXAI:
-            return /^gemini-4-argon(?:-|$)/.test(oai_settings.vertexai_model) || audioSupportedModels.some(model => oai_settings.vertexai_model.includes(model));
+            return /^gemini-4(?:[.-]|$)/.test(oai_settings.vertexai_model) || audioSupportedModels.some(model => oai_settings.vertexai_model.includes(model));
         case chat_completion_sources.OPENROUTER:
             return (Array.isArray(model_list) && model_list.find(m => m.id === oai_settings.openrouter_model)?.architecture?.input_modalities?.includes('audio'));
         case chat_completion_sources.CUSTOM:

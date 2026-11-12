@@ -1,4 +1,4 @@
-import { applyVertexMessageState, vertexResponseRecord, isUsableVertexPartial } from './scripts/vertex-state.js';
+import { applyVertexMessageState, vertexResponseRecord, isUsableVertexPartial, hasUsableVertexParts } from './scripts/vertex-state.js';
 import {
     showdown,
     moment,
@@ -3928,18 +3928,19 @@ class StreamingProcessor {
                         console.error('Failed to render the last received stream content:', previewError);
                     }
                 }
-                if (this.vertexResponse) {
+                const usableVertex = hasUsableVertexParts(this.vertexResponse?.parts);
+                if (usableVertex) {
                     this.vertexMeta = { ...this.vertexMeta, state: this.vertexMeta?.state || 'partial', phase: this.vertexMeta?.state || 'partial' };
                 }
                 // All providers settle pending content through the same message lifecycle.
                 // Never retry a renderer that already threw while processing that content.
-                const hasContent = this.result || this.reasoningHandler.reasoning || this.images.length || this.vertexResponse;
+                const hasContent = this.result || this.reasoningHandler.reasoning || this.images.length || usableVertex;
                 const hasMessage = hasContent && this.type !== 'impersonate' && chat[this.messageId];
                 this.onErrorStreaming({ emitEvents: previewFailed || !hasMessage });
                 if (hasMessage) {
                     if (!previewFailed) {
                         await this.finalizeIntermediaryMessage(this.messageId, this.continueMessage + this.result, { unlockUI: true, updatePreview: false });
-                    } else if (this.vertexResponse) {
+                    } else if (usableVertex) {
                         applyVertexMessageState(chat[this.messageId], this.vertexResponse, this.vertexMeta, this.type === 'continue' ? this.continueMessage : '');
                     }
                     await saveChatConditional();
