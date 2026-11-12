@@ -22,5 +22,19 @@ proposing an upgrade. Other repositories must link to that document rather than
 maintain competing compatibility matrices.
 
 Keep Candidate, formal-image acceptance, and repository HEAD distinct. Record only
-provided production evidence; pending backup, GUI, security review and cleanup are
-separate tasks. Never update companion plugins implicitly.
+provided production evidence; pending backup, security review and cleanup are
+separate tasks. The fnOS Compose GUI update path is confirmed in PERSONAL_RELEASE_OPERATIONS.md.
+Never update companion plugins implicitly.
+
+For companion deployment details, read the [ST-BaiBai-Tools runbook](https://github.com/SurgeXW0508/ST-BaiBai-Tools/blob/personal/stable/docs/PERSONAL_MAINTENANCE.md)
+and the [BaiBaoKu runbook](https://github.com/SurgeXW0508/baibaoku/blob/personal/stable/docs/PERSONAL_MAINTENANCE.md).
+
+After any Runtime-affecting implementation and review, finish with a deployment handoff:
+state whether the change affects NAS Runtime, whether it has reached the correct
+production branch/release, identify the exact current and target commit or image Digest,
+and explicitly ask whether the user wants to update NAS now. Give the component-specific
+procedure from the runbooks: ST uses fnOS Compose with the immutable GHCR Digest;
+Tools uses the SillyTavern Extension Manager; BaiBaoKu uses the targeted Git update in
+the fnOS Docker container terminal followed by a GUI container restart. For documentation-
+only or test-only changes, explicitly state that no NAS Runtime update is required.
+Never publish, update, restart, or modify production data without explicit user authorization.
