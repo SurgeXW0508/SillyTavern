@@ -14,7 +14,7 @@ ghcr.io/surgexw0508/sillytavern-personal@sha256:22973f7169fa694a0894b054e2b754cc
 
 2026-11-12再次核验：容器状态为`running`、RestartCount为0；Compose 标签确认项目名为`sillytavern`，WorkingDir为`/vol3/1000/SillyTavern`，配置文件为`/vol3/1000/SillyTavern/docker-compose.yml`。挂载仍将宿主机的`config`、`data`、`plugins`、`extensions`分别映射到容器对应目录；视频目录以只读方式挂载。飞牛 Docker 已正式管理该 Compose 项目，无需迁移管理方式。
 
-NAS Tools实际为`personal/stable@2f6a9c54d2c906b4a0e44d20c12d0712552e393d`，origin为个人Fork，tracking为`origin/personal/stable`，工作区clean。此后本轮在Tools个人stable分支增加的Runbook、AGENTS和README均为文档变更，不包含Runtime或`dist`；NAS实际SHA仍为`2f6a9c54`。BaiBaoKu NAS已于2026-11-12完成Git跟踪关系整理：当前分支`personal/stable`，origin为`SurgeXW0508/baibaoku`，upstream为`baibai-git/baibaoku`，tracking为`origin/personal/stable`，工作区clean；NAS当前Git HEAD为`4814830f`，Runtime仍是`b211a4e97fdaec24dc8b90c85ddc198fac9ac200`（0.7.3），并保留`backup/pre-personal-stable-20261112`。GitHub `origin/personal/stable` 后续新增了1个仅更新维护Runbook的文档提交；NAS尚未fetch该提交，Runtime无差异。
+NAS Tools实际为`personal/stable@2f6a9c54d2c906b4a0e44d20c12d0712552e393d`，origin为个人Fork，tracking为`origin/personal/stable`，工作区clean。此后本轮在Tools个人stable分支增加的Runbook、AGENTS和README均为文档变更，不包含Runtime或`dist`；NAS实际SHA仍为`2f6a9c54`。BaiBaoKu NAS已于2026-11-12完成Git跟踪关系整理：当前分支`personal/stable`，origin为`SurgeXW0508/baibaoku`，upstream为`baibai-git/baibaoku`，tracking为`origin/personal/stable`，工作区clean；NAS当前Git HEAD为`4814830f`，Runtime仍是`b211a4e97fdaec24dc8b90c85ddc198fac9ac200`（0.7.3），并保留`backup/pre-personal-stable-20261112`。GitHub `origin/personal/stable` 后续新增了3个仅更新维护Runbook的文档提交；NAS尚未fetch这些提交，Runtime无差异。
 
 正式镜像只确认启动、Health、Vertex普通RP正文生成和刷新后聊天记录保留。Candidate多轮/Stop/Regenerate等历史测试单独记录，未在正式环境复验的能力不标通过。生产数据恢复和安全评估也不由healthy状态代替。
 
