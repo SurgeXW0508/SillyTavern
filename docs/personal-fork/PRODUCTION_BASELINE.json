@@ -210,7 +210,6 @@
   },
   "repository_heads": {
     "verified_at": "2026-11-12",
-    "sillytavern_release": "d090e0c94eaf46bd7461fa6a2e89fd75713be38f",
     "sillytavern_upstream_release": "06bde939fb1e9c4c8d8641d810f0a916b5bce127",
     "tools_main": "1e87dfaad87819a90d8032530a62a2ed29f97aea",
     "tools_personal_stable": "2816699503d8bbab1e601f955ecefe30d8b2e57d",
