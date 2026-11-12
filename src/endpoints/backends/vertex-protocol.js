@@ -19,19 +19,34 @@ const object = value => value && typeof value === 'object' && !Array.isArray(val
 export const isArgon = model => /^gemini-4-argon(?:-|$)/i.test(model);
 const isGemini4 = model => /^gemini-4(?:[.-]|$)/i.test(model);
 const modern = model => /^gemini-[34](?:[.-]|$)/i.test(model);
-const isNoSamplingModel = model => isArgon(model) || /gemini-3\.[678]-flash|gemini-3\.5-flash-lite/i.test(model);
-const rejectsPrefillModel = model => isArgon(model) || /gemini-3\.[678]-flash|gemini-3\.5-flash-lite/i.test(model);
+const STRICT_GEMINI3_MODEL_RE = /gemini-3\.[678]-flash|gemini-3\.5-flash-lite/i;
+export const isNoSamplingModel = model => isArgon(model) || STRICT_GEMINI3_MODEL_RE.test(model);
+export const rejectsPrefillModel = model => isArgon(model) || STRICT_GEMINI3_MODEL_RE.test(model);
 export const VERTEX_LIMITS = Object.freeze({ eventBytes: 32 * 1024 * 1024, responseBytes: 64 * 1024 * 1024, argumentBytes: 4 * 1024 * 1024, parts: 100000, calls: 1024 });
+export const ALLOWED_POLICY_REASONS = new Set([
+    'SAFETY', 'PROHIBITED_CONTENT', 'BLOCKLIST', 'SPII', 'OTHER', 'MODEL_ARMOR', 'JAILBREAK',
+    'RECITATION', 'MALFORMED_FUNCTION_CALL', 'UNEXPECTED_TOOL_CALL', 'TOO_MANY_TOOL_CALLS',
+    'IMAGE_SAFETY', 'IMAGE_PROHIBITED_CONTENT', 'IMAGE_RECITATION', 'IMAGE_OTHER', 'NO_IMAGE', 'LANGUAGE',
+]);
 
-function resolveThinkingLevel(model, maxTokens, effort) {
+function resolveThinkingLevel(model, effort) {
     const normalized = effort === 'minimal' ? 'min' : effort;
     if (!['min', 'low', 'medium', 'high', 'max'].includes(normalized)) return null;
-    if (isGemini4(model)) {
-        return { min: 'LOW', low: 'LOW', medium: 'MEDIUM', high: 'HIGH', max: 'HIGH' }[normalized];
+    if (/^gemini-3(?:\.0)?-pro-image/i.test(model)) return 'HIGH';
+    if (/^gemini-3\.1-flash(?:-lite)?-image/i.test(model)) {
+        return ['high', 'max'].includes(normalized) ? 'HIGH' : 'MINIMAL';
     }
-    const mapped = calculateGoogleBudgetTokens(maxTokens, normalized, model.toLowerCase());
-    if (typeof mapped === 'string') return mapped.toUpperCase();
-    return { min: 'LOW', low: 'LOW', medium: 'MEDIUM', high: 'HIGH', max: 'HIGH' }[normalized];
+    if (/^gemini-3(?:\.0)?-pro(?:-|$)/i.test(model)) {
+        return ['high', 'max'].includes(normalized) ? 'HIGH' : 'LOW';
+    }
+    const noMinimal = isGemini4(model) || /gemini-3\.[78]-flash|-pro(?:-|$)/i.test(model);
+    return {
+        min: noMinimal ? 'LOW' : 'MINIMAL',
+        low: 'LOW',
+        medium: 'MEDIUM',
+        high: 'HIGH',
+        max: 'HIGH',
+    }[normalized];
 }
 
 function choice(value, allowed, fallback, field) {
@@ -109,7 +124,7 @@ export function buildVertexRequest(request, options = vertexOptions(request.body
         config.thinkingConfig = { includeThoughts: !!input.include_reasoning };
         const effort = input.reasoning_effort;
         if (effort && effort !== 'auto') {
-            const level = resolveThinkingLevel(options.model, options.max, effort);
+            const level = resolveThinkingLevel(options.model, effort);
             if (!level) fail('此模型需要 auto、low、medium 或 high 思考档位。');
             config.thinkingConfig.thinkingLevel = level;
         }

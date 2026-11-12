@@ -360,3 +360,47 @@ for (const [mode, expectedDiagnostic] of [
     expect(result.runtimeText).toContain(expectedDiagnostic);
 });
 
+test('quiet Vertex errors surface upstream toast while concurrent quiet calls preserve active foreground runtime', async ({ page }) => {
+    const result = await page.evaluate(async () => {
+        const st = await import('/script.js'), { oai_settings } = await import('/scripts/openai.js'), { updateVertexRuntime } = await import('/scripts/vertex-ui.js');
+        await st.newAssistantChat({ temporary: true }); st.changeMainAPI('openai');
+        Object.assign(oai_settings, { chat_completion_source: 'vertexai', vertexai_model: 'gemini-3.8-flash', stream_openai: true });
+        st.setOnlineStatus('gemini-3.8-flash');
+        const errorToasts = [];
+        const original = window.fetch, originalToastrError = window.toastr.error.bind(window.toastr);
+        window.toastr.error = (msg, title, opts) => { errorToasts.push(String(msg)); return originalToastrError(msg, title, opts); };
+        window.fetch = async (url, init) => {
+            if (url === '/api/backends/chat-completions/generate') {
+                return new Response(JSON.stringify({
+                    vertexMeta: { phase: 'failed', state: 'failed' },
+                    error: { code: 'VERTEX_HTTP', message: 'Vertex quota or capacity limit reached. [RESOURCE_EXHAUSTED]', status: 429 },
+                }), { status: 429, headers: { 'Content-Type': 'application/json' } });
+            }
+            return original(url, init);
+        };
+        try {
+            st.setSendButtonState(false);
+            await st.generateRaw({ prompt: [{ role: 'user', content: 'Idle quiet check' }] }).catch(() => {});
+            const idleRuntime = document.getElementById('vertexai_runtime')?.textContent || '';
+            const idleToasts = [...errorToasts];
+
+            errorToasts.length = 0;
+            updateVertexRuntime({ vertexMeta: { phase: 'receiving', segments: 1 } });
+            st.setSendButtonState(true);
+            await st.generateRaw({ prompt: [{ role: 'user', content: 'Concurrent quiet check' }] }).catch(() => {});
+            const activeRuntime = document.getElementById('vertexai_runtime')?.textContent || '';
+            const activeToasts = [...errorToasts];
+            return { idleRuntime, idleToasts, activeRuntime, activeToasts };
+        } finally {
+            st.setSendButtonState(false);
+            window.fetch = original;
+            window.toastr.error = originalToastrError;
+        }
+    });
+    expect(result.idleToasts).toHaveLength(1);
+    expect(result.idleToasts[0]).toContain('[RESOURCE_EXHAUSTED]');
+    expect(result.idleRuntime).toContain('[RESOURCE_EXHAUSTED]');
+    expect(result.activeToasts).toHaveLength(1);
+    expect(result.activeToasts[0]).toContain('[RESOURCE_EXHAUSTED]');
+    expect(result.activeRuntime).toBe('接收正文');
+});

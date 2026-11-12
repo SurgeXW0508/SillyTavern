@@ -7,9 +7,11 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { Response } from 'node-fetch';
 import { setConfigFilePath } from '../src/util.js';
 setConfigFilePath(fileURLToPath(new URL('../default/config.yaml', import.meta.url)));
-const { vertexOptions, buildVertexRequest, readVertexSse, VertexFunctionStream, VERTEX_LIMITS } = await import('../src/endpoints/backends/vertex-protocol.js');
+import { readFileSync } from 'node:fs';
+const { vertexOptions, buildVertexRequest, readVertexSse, VertexFunctionStream, VERTEX_LIMITS, isNoSamplingModel, rejectsPrefillModel } = await import('../src/endpoints/backends/vertex-protocol.js');
 const { createVertexGeneration, createVertexHandler, vertexResultFrame } = await import('../src/endpoints/backends/vertex-native.js');
-const { createVertexConnectionResolver, vertexHost } = await import('../src/endpoints/backends/vertex-transport.js');
+const { createVertexConnectionResolver, vertexHost, readVertexErrorEnvelope } = await import('../src/endpoints/backends/vertex-transport.js');
+const { convertGooglePrompt } = await import('../src/prompt-converters.js');
 const { appendVertexParts, vertexResponseRecord, applyVertexMessageState, reusableVertexResponse, vertexToolHistory, isUsableVertexPartial, hasUsableVertexParts } = await import('../public/scripts/vertex-state.js');
 const { updateVertexRuntime, formatVertexUsage, resetVertexRuntime } = await import('../public/scripts/vertex-ui.js');
 const base = { model: 'gemini-4-argon', stream: true, chat_completion_source: 'vertexai', max_tokens: 131072,
@@ -362,8 +364,30 @@ test('Gemini 2.5/3.x/4 capability matrix omits disabled sampling/penalties, maps
         assert.equal(continued.contents.at(-1).role, 'user');
     }
 
-    assert.equal(buildVertexRequest(context({ model: 'gemini-3.1-pro-preview', reasoning_effort: 'medium' })).generationConfig.thinkingConfig.thinkingLevel, 'LOW');
+    assert.equal(buildVertexRequest(context({ model: 'gemini-3.1-pro-preview', reasoning_effort: 'min' })).generationConfig.thinkingConfig.thinkingLevel, 'LOW');
+    assert.equal(buildVertexRequest(context({ model: 'gemini-3.1-pro-preview', reasoning_effort: 'medium' })).generationConfig.thinkingConfig.thinkingLevel, 'MEDIUM');
     assert.equal(buildVertexRequest(context({ model: 'gemini-3.1-pro-preview', reasoning_effort: 'high' })).generationConfig.thinkingConfig.thinkingLevel, 'HIGH');
+    assert.equal(buildVertexRequest(context({ model: 'gemini-3-pro-preview', reasoning_effort: 'medium' })).generationConfig.thinkingConfig.thinkingLevel, 'LOW');
+    assert.equal(buildVertexRequest(context({ model: 'gemini-3-pro-image', reasoning_effort: 'low' })).generationConfig.thinkingConfig.thinkingLevel, 'HIGH');
+    assert.equal(buildVertexRequest(context({ model: 'gemini-3.1-flash-image', reasoning_effort: 'medium' })).generationConfig.thinkingConfig.thinkingLevel, 'MINIMAL');
+    assert.equal(buildVertexRequest(context({ model: 'gemini-3.1-flash-image', reasoning_effort: 'high' })).generationConfig.thinkingConfig.thinkingLevel, 'HIGH');
+
+    const chatCompletionsSource = readFileSync(new URL('../src/endpoints/backends/chat-completions.js', import.meta.url), 'utf8');
+    const makerSuiteNoSamplingMatch = chatCompletionsSource.match(/const noSamplingModel = (\/[^/]+\/)\.test\(model\);/);
+    assert.ok(makerSuiteNoSamplingMatch, 'MakerSuite noSamplingModel regex must stay aligned');
+    const makerSuiteNoSampling = new RegExp(makerSuiteNoSamplingMatch[1].slice(1, -1));
+    for (const model of ['gemini-2.5-pro', 'gemini-3-flash-preview', 'gemini-3.5-flash', 'gemini-3.5-flash-lite', 'gemini-3.6-flash', 'gemini-3.7-flash', 'gemini-3.8-flash']) {
+        const expectedStrict = isNoSamplingModel(model);
+        assert.equal(rejectsPrefillModel(model), expectedStrict);
+        assert.equal(makerSuiteNoSampling.test(model), expectedStrict);
+        const converted = convertGooglePrompt(
+            [{ role: 'user', content: 'hi' }, { role: 'assistant', content: 'trailing' }],
+            model,
+            true,
+            { charName: 'Assistant', userName: 'User', groupNames: [] },
+        );
+        assert.equal(converted.contents.at(-1).role === 'user', expectedStrict);
+    }
 
     const legacyImage = buildVertexRequest(context({ model: 'gemini-2.5-flash-image', request_images: true, request_image_resolution: '2K' }));
     assert.deepEqual(legacyImage.generationConfig.responseModalities, ['TEXT', 'IMAGE']);
@@ -384,6 +408,7 @@ test('structured RPC error allowlists surface safe codes/fields without echoing 
                     '@type': 'type.googleapis.com/google.rpc.BadRequest',
                     fieldViolations: [
                         { field: 'generationConfig.topK', description: 'PRIVATE_PROMPT in description' },
+                        { field: 'generation_config.thinking_config.thinking_level', description: 'snake_case path' },
                         { field: 'contents[0].parts[0].text', description: 'valid path' },
                         { field: 'unrootedSecretField', description: 'must be ignored' },
                         { field: 'generationConfig.PRIVATE_KEY', description: 'uppercase segment rejected' },
@@ -397,7 +422,7 @@ test('structured RPC error allowlists surface safe codes/fields without echoing 
     assert.equal(calls, 1);
     assert.equal(httpErr.state, 'failed');
     assert.equal(httpErr.error.apiStatus, 'INVALID_ARGUMENT');
-    assert.match(httpErr.error.message, /\[INVALID_ARGUMENT · API_KEY_INVALID · generationConfig\.topK · contents\[0\]\.parts\[0\]\.text\]/);
+    assert.match(httpErr.error.message, /\[INVALID_ARGUMENT · API_KEY_INVALID · generationConfig\.topK · generation_config\.thinking_config\.thinking_level · contents\[0\]\.parts\[0\]\.text\]/);
     const serialized = JSON.stringify(httpErr);
     assert.ok(!serialized.includes('PRIVATE_'));
     assert.ok(!serialized.includes('secret.invalid'));
@@ -410,6 +435,18 @@ test('structured RPC error allowlists surface safe codes/fields without echoing 
 
     const oversized = await run(async () => new Response('{"error":{"status":"INVALID_ARGUMENT","pad":"' + 'x'.repeat(20000) + '"}}', { status: 429 }));
     assert.equal(oversized.error.message, 'Vertex quota or capacity limit reached.');
+
+    let destroyed = false;
+    const stalledStream = {
+        destroy() { destroyed = true; },
+        async *[Symbol.asyncIterator]() {
+            await sleep(500);
+            yield Buffer.from('{"error":{"status":"INVALID_ARGUMENT"}}');
+        },
+    };
+    const timedOutEnvelope = await readVertexErrorEnvelope({ body: stalledStream }, 16384, 25);
+    assert.equal(timedOutEnvelope, null);
+    assert.equal(destroyed, true);
 
     const blocked = await run(async () => upstream([{ promptFeedback: { blockReason: 'PROHIBITED_CONTENT', blockReasonMessage: 'PRIVATE_PROMPT' } }]));
     assert.equal(blocked.error.code, 'VERTEX_BLOCKED');
@@ -428,6 +465,14 @@ test('structured RPC error allowlists surface safe codes/fields without echoing 
     assert.equal(thoughtOnly.state, 'partial');
     assert.equal(thoughtOnly.error.code, 'VERTEX_EMPTY');
     assert.match(thoughtOnly.error.message, /reasoning thoughts only/);
+
+    const hiddenThoughtMaxTokens = await run(
+        async () => upstream([{ ...candidate([], 'MAX_TOKENS'), usageMetadata: { promptTokenCount: 100, thoughtsTokenCount: 512, totalTokenCount: 612 } }]),
+        context({ include_reasoning: false }),
+    );
+    assert.equal(hiddenThoughtMaxTokens.state, 'failed');
+    assert.equal(hiddenThoughtMaxTokens.error.code, 'VERTEX_EMPTY');
+    assert.match(hiddenThoughtMaxTokens.error.message, /exhausted maxOutputTokens during thinking/);
 
     const trulyEmpty = await run(async () => upstream([candidate([], 'STOP')]));
     assert.equal(trulyEmpty.state, 'failed');

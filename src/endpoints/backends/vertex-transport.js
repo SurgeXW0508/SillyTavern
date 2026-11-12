@@ -34,13 +34,7 @@ const ALLOWED_ERROR_REASONS = new Set([
     'LOCATION_TAXONOMY_INVALID', 'REGION_NOT_SUPPORTED',
 ]);
 
-export const ALLOWED_POLICY_REASONS = new Set([
-    'SAFETY', 'PROHIBITED_CONTENT', 'BLOCKLIST', 'SPII', 'OTHER', 'MODEL_ARMOR', 'JAILBREAK',
-    'RECITATION', 'MALFORMED_FUNCTION_CALL', 'UNEXPECTED_TOOL_CALL', 'TOO_MANY_TOOL_CALLS',
-    'IMAGE_SAFETY', 'IMAGE_PROHIBITED_CONTENT', 'IMAGE_RECITATION', 'IMAGE_OTHER', 'NO_IMAGE', 'LANGUAGE',
-]);
-
-const ALLOWED_FIELD_PATH = /^(?:generationConfig|thinkingConfig|toolConfig|tools|systemInstruction|contents|safetySettings|model|labels|cachedContent)(?:\.[a-z][a-zA-Z0-9_]{0,48}|\[\d{1,4}\]){0,8}$/;
+const ALLOWED_FIELD_PATH = /^(?:generationConfig|generation_config|thinkingConfig|thinking_config|toolConfig|tool_config|tools|systemInstruction|system_instruction|contents|safetySettings|safety_settings|model|labels|cachedContent|cached_content)(?:\.[a-z][a-zA-Z0-9_]{0,48}|\[\d{1,4}\]){0,8}$/;
 
 /** Bounded decoded bytes, used for JSON success responses. */
 export async function readVertexJson(response, limit = 65536) {
@@ -59,24 +53,37 @@ export async function readVertexJson(response, limit = 65536) {
     }
 }
 
-/** Safely read at most 16 KiB from an HTTP error body to extract structured RPC enums; never throws. */
-export async function readVertexErrorEnvelope(response, limit = 16384) {
-    const chunks = [];
-    let bytes = 0;
+/** Safely read at most 16 KiB from an HTTP error body within 5s to extract structured RPC enums; never throws. */
+export async function readVertexErrorEnvelope(response, limit = 16384, timeoutMs = 5000) {
+    let timer;
     try {
-        for await (const chunk of response?.body || []) {
-            const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-            bytes += buffer.length;
-            if (bytes > limit) return null;
-            chunks.push(buffer);
-        }
-        if (!bytes) return null;
-        const parsed = JSON.parse(Buffer.concat(chunks).toString('utf8'));
-        const envelope = Array.isArray(parsed) ? parsed[0]?.error : parsed?.error;
-        return envelope && typeof envelope === 'object' && !Array.isArray(envelope) ? envelope : null;
+        const readBody = (async () => {
+            const chunks = [];
+            let bytes = 0;
+            for await (const chunk of response?.body || []) {
+                const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+                bytes += buffer.length;
+                if (bytes > limit) return null;
+                chunks.push(buffer);
+            }
+            if (!bytes) return null;
+            const parsed = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+            const envelope = Array.isArray(parsed) ? parsed[0]?.error : parsed?.error;
+            return envelope && typeof envelope === 'object' && !Array.isArray(envelope) ? envelope : null;
+        })();
+        readBody.catch(() => null);
+        const timeout = new Promise(resolve => {
+            timer = setTimeout(() => {
+                response?.body?.destroy?.();
+                resolve(null);
+            }, timeoutMs);
+            timer.unref?.();
+        });
+        return await Promise.race([readBody, timeout]);
     } catch {
         return null;
     } finally {
+        clearTimeout(timer);
         response?.body?.destroy?.();
     }
 }

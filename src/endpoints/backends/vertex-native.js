@@ -3,8 +3,8 @@
 import fetch from 'node-fetch';
 import { postProcessPrompt, getPromptNames } from '../../prompt-converters.js';
 import { flattenSchema } from '../../util.js';
-import { VertexError, VERTEX_LIMITS, vertexOptions, buildVertexRequest, readVertexSse, VertexFunctionStream } from './vertex-protocol.js';
-import { resolveVertexConnection, readVertexJson, readVertexErrorEnvelope, vertexHttpError, ALLOWED_POLICY_REASONS } from './vertex-transport.js';
+import { VertexError, VERTEX_LIMITS, ALLOWED_POLICY_REASONS, vertexOptions, buildVertexRequest, readVertexSse, VertexFunctionStream } from './vertex-protocol.js';
+import { resolveVertexConnection, readVertexJson, readVertexErrorEnvelope, vertexHttpError } from './vertex-transport.js';
 
 const usageKeys = ['promptTokenCount', 'candidatesTokenCount', 'thoughtsTokenCount', 'cachedContentTokenCount', 'totalTokenCount', 'toolUsePromptTokenCount'];
 
@@ -128,10 +128,14 @@ export function createVertexGeneration({ fetchImpl = fetch, resolveConnection = 
                 throw new VertexError('VERTEX_FINISH', `Vertex did not complete the response normally.${finishTag}`);
             }
             if (!converter.visibleChars && !converter.completed) {
-                const thoughtOnly = parts.some(p => p.thought && typeof p.text === 'string' && p.text.trim().length > 0);
-                throw new VertexError('VERTEX_EMPTY', thoughtOnly
-                    ? 'Vertex returned reasoning thoughts only, without visible response text.'
-                    : 'Vertex returned no visible text, image or complete tool call.');
+                const hasThoughts = Number(usage.thoughtsTokenCount) > 0
+                    || parts.some(p => p.thought && typeof p.text === 'string' && p.text.trim().length > 0);
+                const emptyMessage = hasThoughts && finishReason === 'MAX_TOKENS'
+                    ? 'Vertex exhausted maxOutputTokens during thinking before producing visible text. Increase max tokens or lower reasoning effort.'
+                    : hasThoughts
+                        ? 'Vertex returned reasoning thoughts only, without visible response text.'
+                        : 'Vertex returned no visible text, image or complete tool call.';
+                throw new VertexError('VERTEX_EMPTY', emptyMessage);
             }
             signal.throwIfAborted();
         } catch (caught) {

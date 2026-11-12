@@ -3163,8 +3163,8 @@ async function sendOpenAIRequest(type, messages, signal, { jsonSchema = null } =
     await eventSource.emit(event_types.CHAT_COMPLETION_SETTINGS_READY, generate_data);
 
     const nativeVertex = generate_data.chat_completion_source === chat_completion_sources.VERTEXAI;
-    const isQuiet = type === 'quiet';
-    if (nativeVertex) updateVertexRuntime(null);
+    const trackVertexRuntime = nativeVertex && (type !== 'quiet' || !is_send_press);
+    if (trackVertexRuntime) updateVertexRuntime(null);
     const generate_url = '/api/backends/chat-completions/generate';
     let response;
     try {
@@ -3175,7 +3175,7 @@ async function sendOpenAIRequest(type, messages, signal, { jsonSchema = null } =
             signal: signal,
         });
     } catch (err) {
-        if (nativeVertex) {
+        if (trackVertexRuntime) {
             updateVertexRuntime(signal.aborted
                 ? { vertexMeta: { phase: 'canceled', state: 'canceled' } }
                 : { error: { message: '网络连接中断或无法连接后端' } });
@@ -3185,20 +3185,17 @@ async function sendOpenAIRequest(type, messages, signal, { jsonSchema = null } =
 
     if (!response.ok) {
         const errorText = await response.text();
-        let parsedError = null;
-        try {
-            parsedError = JSON.parse(errorText);
-        } catch {
-            // Non-JSON error body; handled below.
-        }
-        if (nativeVertex) {
+        if (trackVertexRuntime) {
+            let parsedError = null;
+            try {
+                parsedError = JSON.parse(errorText);
+            } catch {
+                // Non-JSON error body; handled below.
+            }
             updateVertexRuntime(parsedError?.error ? parsedError : { error: { message: `HTTP ${response.status}` } });
         }
-        tryParseStreamingError(response, errorText, { quiet: isQuiet });
-        const detail = parsedError && (parsedError.error || parsedError.detail || parsedError.message)
-            ? (typeof parsedError.message === 'string' && !parsedError.error && !parsedError.detail ? parsedError.message : getChatCompletionErrorMessage(parsedError, response))
-            : `Got response status ${response.status}`;
-        throw new Error(detail);
+        tryParseStreamingError(response, errorText);
+        throw new Error(`Got response status ${response.status}`);
     }
     if (stream) {
         const eventStream = getEventSourceStream();
@@ -3225,7 +3222,7 @@ async function sendOpenAIRequest(type, messages, signal, { jsonSchema = null } =
                     }
                     const parsed = JSON.parse(rawData);
                     if (nativeVertex) {
-                        updateVertexRuntime(parsed);
+                        if (trackVertexRuntime) updateVertexRuntime(parsed);
                         Object.assign(state.vertexMeta, parsed.vertexMeta || {});
                         appendVertexParts(state.vertexResponse.parts, parsed.candidates?.[0]?.content?.parts);
                         if (parsed.vertexEnvelope) state.vertexResponse.envelope = structuredClone(parsed.vertexEnvelope);
@@ -3235,21 +3232,21 @@ async function sendOpenAIRequest(type, messages, signal, { jsonSchema = null } =
                             const partial = hasUsableVertexParts(state.vertexResponse.parts);
                             vertexNotified = true;
                             if (partial) {
-                                if (!isQuiet) toastr.warning(parsed.vertexMeta?.warning || message, t`Vertex response incomplete`);
+                                toastr.warning(parsed.vertexMeta?.warning || message, t`Vertex response incomplete`);
                                 yield { text, swipes, toolCalls, state };
-                            } else if (!isQuiet) {
+                            } else {
                                 toastr.error(message, t`API returned an error`);
                             }
                             throw new Error(message);
                         }
-                        if (parsed.vertexMeta?.state === 'partial' && parsed.vertexMeta?.warning && !isQuiet && !vertexNotified) {
+                        if (parsed.vertexMeta?.state === 'partial' && parsed.vertexMeta?.warning && !vertexNotified) {
                             vertexNotified = true;
                             toastr.warning(parsed.vertexMeta.warning, t`Vertex response incomplete`);
                         }
                     }
 
                     if (nativeVertex && !parsed.candidates?.some(c => c.content?.parts?.length) && !parsed.vertexMeta?.state) continue;
-                    tryParseStreamingError(response, rawData, { quiet: isQuiet });
+                    tryParseStreamingError(response, rawData);
                     if (canMultiSwipe && Array.isArray(parsed?.choices) && parsed?.choices?.[0]?.index > 0) {
                         const swipeIndex = parsed.choices[0].index - 1;
                         // FIXME: state.reasoning should be an array to support multi-swipe
@@ -3266,12 +3263,14 @@ async function sendOpenAIRequest(type, messages, signal, { jsonSchema = null } =
                 if (nativeVertex && !vertexTerminal) {
                     vertexTerminal = true;
                     if (signal.aborted) {
-                        updateVertexRuntime({ vertexMeta: { phase: 'canceled', state: 'canceled' } });
+                        if (trackVertexRuntime) updateVertexRuntime({ vertexMeta: { phase: 'canceled', state: 'canceled' } });
                     } else {
                         const partial = hasUsableVertexParts(state.vertexResponse.parts);
                         const errMsg = streamErr instanceof Error && streamErr.message ? streamErr.message : 'Vertex stream interrupted.';
-                        updateVertexRuntime({ vertexMeta: { state: partial ? 'partial' : 'failed', phase: partial ? 'partial' : 'failed' }, error: { message: errMsg } });
-                        if (!isQuiet && !vertexNotified) {
+                        if (trackVertexRuntime) {
+                            updateVertexRuntime({ vertexMeta: { state: partial ? 'partial' : 'failed', phase: partial ? 'partial' : 'failed' }, error: { message: errMsg } });
+                        }
+                        if (!vertexNotified) {
                             vertexNotified = true;
                             if (partial) toastr.warning(errMsg, t`Vertex response incomplete`);
                             else toastr.error(errMsg, t`API returned an error`);
@@ -3280,10 +3279,8 @@ async function sendOpenAIRequest(type, messages, signal, { jsonSchema = null } =
                 }
                 throw streamErr;
             } finally {
-                if (nativeVertex && !vertexTerminal) {
-                    updateVertexRuntime(signal.aborted
-                        ? { vertexMeta: { phase: 'canceled', state: 'canceled' } }
-                        : { vertexMeta: { phase: 'completed', state: 'completed' } });
+                if (trackVertexRuntime && !vertexTerminal) {
+                    updateVertexRuntime({ vertexMeta: { phase: 'canceled', state: 'canceled' } });
                 }
                 await reader.cancel().catch(() => {});
                 reader.releaseLock();
@@ -3294,28 +3291,28 @@ async function sendOpenAIRequest(type, messages, signal, { jsonSchema = null } =
         try {
             data = await response.json();
         } catch (err) {
-            if (nativeVertex) {
+            if (trackVertexRuntime) {
                 updateVertexRuntime(signal.aborted
                     ? { vertexMeta: { phase: 'canceled', state: 'canceled' } }
                     : { error: { message: 'Vertex 返回了无效响应' } });
             }
             throw err;
         }
-        if (nativeVertex) updateVertexRuntime(data);
+        if (trackVertexRuntime) updateVertexRuntime(data);
 
-        checkQuotaError(data, { quiet: isQuiet });
-        checkModerationError(data, { quiet: isQuiet });
+        checkQuotaError(data);
+        checkModerationError(data);
 
         const partial = nativeVertex && isUsableVertexPartial(data);
         if (data.error && !partial) {
             const message = getChatCompletionErrorMessage(data, response);
-            if (!isQuiet) toastr.error(message, t`API returned an error`);
+            toastr.error(message, t`API returned an error`);
             throw new Error(message);
         }
 
-        if (partial && !isQuiet) toastr.warning(data.vertexMeta.warning || data.error?.message || t`The response is incomplete. Available content has been retained.`, t`Vertex response incomplete`);
+        if (partial) toastr.warning(data.vertexMeta.warning || data.error?.message || t`The response is incomplete. Available content has been retained.`, t`Vertex response incomplete`);
 
-        if (!isQuiet) {
+        if (type !== 'quiet') {
             const logprobs = parseChatCompletionLogprobs(data);
             // Delay is required to allow the active message to be updated to
             // the one we are generating (happens right after sendOpenAIRequest)
@@ -6299,8 +6296,7 @@ async function testApiConnection() {
         console.log(reply);
         toastr.success(t`API connection successful!`);
     } catch (err) {
-        const detail = err instanceof Error && err.message && !/^Got response status \d+$/.test(err.message) ? err.message : '';
-        toastr.error(detail || t`Could not get a reply from API. Check your connection settings / API key and try again.`, t`API connection failed`);
+        toastr.error(t`Could not get a reply from API. Check your connection settings / API key and try again.`);
     }
 }
 
