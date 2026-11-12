@@ -251,7 +251,7 @@ Owner Review：本轮只改变维护记录和交接文档，没有能力实现�
 - `main`：纯上游同步镜像，只接收原作者main，不放个人Runtime策略。
 - `personal/stable`：唯一生产分支，NAS只允许跟踪此分支。
 - `personal/stable`于2026-11-12从个人Fork的main创建，初始Runtime基线为`b211a4e97fdaec24dc8b90c85ddc198fac9ac200`（0.7.3），与上游等价；本次创建分支和新增维护文档不包含Runtime改动。
-- 2026-11-12已完成NAS Git跟踪关系整理：`origin`指向`SurgeXW0508/baibaoku`，`upstream`指向`baibai-git/baibaoku`，当前`personal/stable`跟踪`origin/personal/stable`，工作区clean。NAS HEAD为`4814830f`，原Runtime基线`b211a4e9`保留在`backup/pre-personal-stable-20261112`。本次只修改Git元数据并切换到文档提交，未更新Runtime或重启容器。
+- 2026-11-12已完成NAS Git跟踪关系整理：`origin`指向`SurgeXW0508/baibaoku`，`upstream`指向`baibai-git/baibaoku`，当前`personal/stable`跟踪`origin/personal/stable`，工作区clean。NAS HEAD为`4814830f`，原Runtime基线`b211a4e9`保留在`backup/pre-personal-stable-20261112`。截至本次文档核验，GitHub `origin/personal/stable` 为`c6037030`，比NAS本地HEAD多1个仅修改维护Runbook的文档提交；Runtime未变化。本次只修改Git元数据并切换到文档提交，未更新Runtime或重启容器。
 
 ### 上游更新流程
 
