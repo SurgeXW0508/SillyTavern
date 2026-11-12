@@ -327,17 +327,18 @@ Decision：三个仓库统一采用“上游同步镜像 → 独立审查 → �
 
 Scope（初始文档收口）：只修改文档并在个人Fork创建柏宝库`personal/stable`分支；未修改Runtime源码、未运行构建或发布。\n\nFollow-up（2026-11-12）：用户提供NAS执行结果，确认柏宝库已成功切换到个人Fork的`personal/stable`，并设置`origin`为个人仓库、`upstream`为原作者；工作区clean，保留原始Runtime备份分支。本次Git跟踪整理不改变Runtime，不需要重启。随后将当前NAS分支、备份分支和远端关系同步记录到Production Baseline与柏宝库Runbook。
 
-## 2026-11-12 — Vertex 协议契约对齐、封闭枚举诊断与流式结算修复（Stage Candidate）
+## 2026-11-12 — Vertex 协议契约对齐、封闭枚举诊断、凭据边界与流式/重放收尾（Stage Candidate）
 
-Trigger（符合冻结后重开门槛：P1 请求 400 + 流式空失败数据正确性缺陷）：
+Trigger（符合冻结后重开门槛：安全凭据边界 + P1 请求 400 + 流式/历史重放数据正确性缺陷）：
 
-1. 协议契约缺陷（P1）：`vertex-protocol.js`在默认预设`top_k: 0`时向采样模型发送非法的`generationConfig.topK: 0`；未对`gemini-3.6/3.7/3.8-flash`与`gemini-3.5-flash-lite`剥离采样/惩罚参数；`gemini-3.7/3.8-flash`的`min`及`gemini-3-pro-image`/`gemini-3.1-flash-image`等模型的思考档位映射与Vertex官方契约不一致（保留`gemini-3.1-pro`原生的`LOW/MEDIUM/HIGH`支持，与AI Studio路径解耦）；`gemini-2.5-flash-image`误传`imageConfig.imageSize`导致400；选择器与回退规则缺少`gemini-3.8-flash`。
-2. 流式空失败幽灵落盘（数据正确性）：`openai.js`在流式`parsed.error`且零可用内容时仍`yield`空的`vertexResponseRecord([], model)`，`StreamingProcessor.generate()`将其判为真值`hasContent`，导致流式报错时向磁盘写入空助手消息且未弹出错误提示；预检HTTP错误、取消与流中断未同步更新`#vertexai_runtime`。保持上游`quiet`后台生成的原有错误提示行为不变，同时防止前台生成期间的并发`quiet`调用覆盖`#vertexai_runtime`状态栏。
+1. 共享凭据入口目标校验缺口（安全边界，Personal 补丁）：上游`src/endpoints/google.js`的`getGoogleApiConfig`（图片描述、原生TTS、Imagen、Veo及`google-vectors.js`共用）直接将`vertexai_region`拼接进域名并附加已保存的Google凭据，可被构造区域诱导至外部域名。现收敛单一Owner `getVertexHost(region)`（`google.js`导出，`vertex-transport.js`的`vertexHost`委托复用），在非反代Vertex模式下于读取/换取凭据前强制校验官方Google域名；若未来上游原生修复该校验，删除本个人补丁。
+2. 协议契约缺陷（P1）：`vertex-protocol.js`在默认预设`top_k: 0`时向采样模型发送非法的`generationConfig.topK: 0`；未对`gemini-3.6/3.7/3.8-flash`与`gemini-3.5-flash-lite`剥离采样/惩罚参数；`gemini-3.7/3.8-flash`的`min`及`gemini-3-pro-image`/`gemini-3.1-flash-image`等模型的思考档位映射与Vertex官方契约不一致（保留`gemini-3.1-pro`原生的`LOW/MEDIUM/HIGH`支持，与AI Studio路径解耦）；`gemini-2.5-flash-image`误传`imageConfig.imageSize`导致400；选择器与回退规则缺少`gemini-3.8-flash`。
+3. 流式空失败与原生历史重放边界（数据正确性）：`openai.js`在流式`parsed.error`且零可用内容时仍`yield`空的`vertexResponseRecord([], model)`，导致空助手消息落盘且未弹出错误提示；中断/partial/未执行的`functionCall`在下一轮通过普通显示消息被无配对`functionResponse`重放（现由`vertex-state.js`的`reusableVertexDisplayResponse`确立不变式：`functionCall`仅允许经成对`tool_invocations`载体消息重放，显示消息重放一律剥离`functionCall`，对已存盘旧聊天同样生效）；开启“角色名写入正文”（`DEFAULT`/`CONTENT`）时`setOpenAIMessages`传入带前缀的`promptText`导致原生重放吞掉角色名前缀（现改为传入未加前缀的消息原文，保留前缀为独立无签名文本Part）。保持上游`quiet`后台生成的原有错误提示行为不变，同时防止前台生成期间的并发`quiet`调用覆盖`#vertexai_runtime`状态栏。
 
 Capability Ownership Review & Security Boundary：
 
-- Owner：全部能力归属ST Core唯一Owner；`ST-BaiBai-Tools`（`Save Generate`继续不装配、`Generate Retry`保持关闭）与`baibaoku`零改动，柏宝库5个前端Bridge锚点全部通过幂等匹配验证。
+- Owner：全部能力归属ST Core唯一Owner（`google.js`、`vertex-*.js`、`openai.js`、`vertex-state.js`、`vertex-ui.js`）；`ST-BaiBai-Tools`（`Save Generate`继续不装配、`Generate Retry`保持关闭）与`baibaoku`零改动，柏宝库5个前端Bridge锚点全部通过幂等匹配验证。
 - 第三方插件减法：ST Core原生已完整支持`gemini-4-argon`及流式/推理契约，无需保留第三方`Quirlune/Vertex-Custom-Models`扩展（建议在ST扩展管理器卸载以避免DOM选择器争用）；`Shalistera@78a22e87`跨渠道自定义模型继续保持Intentional Omission。
-- 防封号与安全边界：维持100%官方Vertex端点与标准头，每次用户操作仅单次上游派发（零自动重试）；错误诊断采用16 KiB / 5s双有界读取与封闭枚举白名单（`google.rpc.Code`、`ErrorInfo.reason`、协议层安全阻断枚举及受根约束的camelCase/snake_case Schema路径），绝不读取或回显上游`error.message`、`description`、URL、凭据或Prompt；结合`usageMetadata.thoughtsTokenCount`识别未开启思考展示时思考耗尽`maxOutputTokens`的场景；`#vertexai_runtime`等待秒表仅在等待阶段运行，进入接收或任意终态/异常/取消立即销毁，零残留定时器、零额外网络请求，并在终态展示隐式缓存命中率与Token分项明细。
+- 防封号与安全边界：维持100%官方Vertex端点与标准头，每次用户操作仅单次上游派发（零自动重试）；聊天与多媒体共用单一官方Vertex域名白名单解析；错误诊断采用16 KiB / 5s双有界读取与封闭枚举白名单（`google.rpc.Code`、`ErrorInfo.reason`、协议层安全阻断枚举及受根约束的camelCase/snake_case Schema路径），绝不读取或回显上游`error.message`、`description`、URL、凭据或Prompt；结合`usageMetadata.thoughtsTokenCount`识别未开启思考展示时思考耗尽`maxOutputTokens`的场景；`#vertexai_runtime`等待秒表仅在等待阶段运行，进入接收或任意终态/异常/取消立即销毁，零残留定时器、零额外网络请求，并在终态展示隐式缓存命中率与Token分项明细。
 
 Scope & Deployment Status：变更位于独立候选分支`stage/vertex-protocol-and-ux`，已通过`lint`、`test:vertex`、`test:reliability`、`test:unit`、`release.node.mjs`、Python治理单测、真实Chromium E2E（`VertexNative.e2e.js` + `CoreStreaming.e2e.js`）、柏宝箱`test:personal-stable`与柏宝库Bridge核验。尚未合入`release`，未更新`personal-release.json`或`PRODUCTION_BASELINE.json`，未构建GHCR镜像，未操作NAS生产环境。

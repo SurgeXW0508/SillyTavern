@@ -47,7 +47,7 @@ import { forceCharacterEditorTokenize, getCustomStoppingStrings, persona_descrip
 import { SECRET_KEYS, secret_state, writeSecret } from './secrets.js';
 
 import { getEventSourceStream } from './sse-stream.js';
-import { appendVertexParts, vertexResponseRecord, reusableVertexResponse, vertexToolResponse, vertexToolHistory, isUsableVertexPartial, hasUsableVertexParts } from './vertex-state.js';
+import { appendVertexParts, vertexResponseRecord, reusableVertexDisplayResponse, vertexToolResponse, vertexToolHistory, isUsableVertexPartial, hasUsableVertexParts } from './vertex-state.js';
 import { vertexDefaults, vertexSettingsMap, initVertexUI, updateVertexRuntime } from './vertex-ui.js';
 import {
     clamp,
@@ -597,6 +597,8 @@ function setOpenAIMessages(chat) {
             role = 'system';
         }
 
+        const rawContent = String(content ?? '').replace(/\r/gm, '');
+
         // for groups or sendas command - prepend a character's name
         switch (oai_settings.names_behavior) {
             case character_names_behavior.NONE:
@@ -637,8 +639,8 @@ function setOpenAIMessages(chat) {
         const isOtherGroupMember = selected_group && chat[j].name !== name2;
         let signature = isSameModel && !isOtherGroupMember ? chat[j]?.extra?.reasoning_signature : null;
         const reasoning = isSameModel && !isOtherGroupMember ? String(chat[j]?.extra?.reasoning ?? '') : '';
-        const vertexResponse = isSameModel && !isOtherGroupMember && currentApi === chat_completion_sources.VERTEXAI ? reusableVertexResponse(chat[j], currentModel) : null;
-        if (vertexResponse) vertexResponse.promptText = content;
+        const vertexResponse = isSameModel && !isOtherGroupMember && currentApi === chat_completion_sources.VERTEXAI ? reusableVertexDisplayResponse(chat[j], currentModel) : null;
+        if (vertexResponse) vertexResponse.promptText = rawContent.length ? rawContent : content;
         if (currentApi === chat_completion_sources.VERTEXAI && chat[j].extra?.vertex_response && !vertexResponse) signature = null;
 
         // Remove reasoning metadata from invocations if the API/model don't match

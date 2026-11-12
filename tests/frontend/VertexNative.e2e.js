@@ -4,6 +4,7 @@ import { testSetup } from './frontent-test-utils.js';
 import { setConfigFilePath } from '../../src/util.js';
 setConfigFilePath(new URL('../../default/config.yaml', import.meta.url).pathname);
 const { createVertexGeneration, vertexResultFrame } = await import('../../src/endpoints/backends/vertex-native.js');
+const { buildVertexRequest } = await import('../../src/endpoints/backends/vertex-protocol.js');
 const { Response: ProviderResponse } = await import('node-fetch');
 
 test.beforeEach(async ({ page }) => {
@@ -160,7 +161,7 @@ test('actual tool actions run once per call and their saved invocation record ca
             const response = vertexResponseRecord(parts, 'gemini-4-argon');
             const result = await ToolManager.invokeFunctionTools({ responseContent: { parts } }, { vertexResponse: response });
             await ToolManager.saveFunctionToolInvocations(result.invocations);
-            return { executed, invocations: result.invocations, saved: st.chat.at(-1).extra.tool_invocations };
+            return { executed, invocations: result.invocations, saved: st.chat.findLast(m => m.extra?.tool_invocations)?.extra.tool_invocations };
         } finally { ToolManager.unregisterFunctionTool('phasec_lookup'); }
     });
     expect(result.executed).toEqual(['A', 'B']);
@@ -403,4 +404,149 @@ test('quiet Vertex errors surface upstream toast while concurrent quiet calls pr
     expect(result.activeToasts).toHaveLength(1);
     expect(result.activeToasts[0]).toContain('[RESOURCE_EXHAUSTED]');
     expect(result.activeRuntime).toBe('接收正文');
+});
+
+test('partial turn with unexecuted functionCall saves raw parts, reloads from disk, and omits unpaired functionCall on next turn', async ({ page }) => {
+    const partialParts = [
+        { thought: true, text: 'retained plan', thoughtSignature: 'PLAN_SIG' },
+        { text: 'Partial answer.', thoughtSignature: 'PARTIAL_SIG' },
+        { functionCall: { id: 'unexec-1', name: 'phasec_unexecuted', args: { query: 'secret' } }, thoughtSignature: 'CALL_SIG' },
+    ];
+    const generate = createVertexGeneration({
+        resolveConnection: async () => ({ url: 'https://synthetic.invalid', headers: {} }),
+        fetchImpl: async () => new ProviderResponse(JSON.stringify({
+            candidates: [{ content: { role: 'model', parts: partialParts }, finishReason: 'MAX_TOKENS' }],
+        })),
+    });
+    const partialTurn = await generate({
+        user: {},
+        body: {
+            model: 'gemini-4-argon',
+            stream: false,
+            max_tokens: 1024,
+            messages: [{ role: 'user', content: 'trigger partial tool' }],
+            tools: [{ type: 'function', function: { name: 'phasec_unexecuted', parameters: { type: 'object', properties: { query: { type: 'string' } } } } }],
+        },
+    });
+    await page.unroute('**/api/chats/save');
+    const result = await page.evaluate(async firstPayload => {
+        const st = await import('/script.js'), { oai_settings } = await import('/scripts/openai.js'), { power_user } = await import('/scripts/power-user.js'), { ToolManager } = await import('/scripts/tool-calling.js');
+        await st.newAssistantChat({ temporary: true }); st.changeMainAPI('openai');
+        const file = `phasec-unexec-reload-${crypto.randomUUID()}`;
+        const character = { name: 'ReloadFixture', avatar: 'phasec-reload-fixture.png', chat: file, description: '', personality: '', scenario: '', first_mes: '', mes_example: '', data: { extensions: {} } };
+        st.characters.push(character); st.setCharacterId(st.characters.length - 1); st.setCharacterName(character.name);
+        Object.assign(oai_settings, { chat_completion_source: 'vertexai', vertexai_model: 'gemini-4-argon', stream_openai: false, function_calling: true,
+            show_thoughts: true, openai_max_context: 131072, openai_max_tokens: 2048, custom_prompt_post_processing: '' });
+        Object.assign(power_user, { message_token_count_enabled: false, auto_continue: false, auto_swipe: false });
+        st.setOnlineStatus('gemini-4-argon');
+        let executed = 0;
+        const capturedBodies = [];
+        ToolManager.registerFunctionTool({
+            name: 'phasec_unexecuted',
+            description: 'Must never execute when turn settled as partial',
+            parameters: { type: 'object', properties: { query: { type: 'string' } } },
+            action: () => { executed++; return 'unexpected'; },
+        });
+        const original = window.fetch;
+        window.fetch = async (url, init) => {
+            if (url === '/api/backends/chat-completions/generate') {
+                capturedBodies.push(JSON.parse(init.body));
+                if (capturedBodies.length === 1) {
+                    return new Response(JSON.stringify(firstPayload), { headers: { 'Content-Type': 'application/json' } });
+                }
+                const secondTurn = {
+                    vertexMeta: { phase: 'completed', state: 'completed', model: 'gemini-4-argon', finishReason: 'STOP' },
+                    candidates: [{ content: { role: 'model', parts: [{ text: 'Clean follow-up.', thoughtSignature: 'NEXT_SIG' }] }, finishReason: 'STOP' }],
+                    responseContent: { role: 'model', parts: [{ text: 'Clean follow-up.', thoughtSignature: 'NEXT_SIG' }] },
+                    choices: [{ message: { content: 'Clean follow-up.', reasoning: '' } }],
+                };
+                return new Response(JSON.stringify(secondTurn), { headers: { 'Content-Type': 'application/json' } });
+            }
+            return original(url, init);
+        };
+        try {
+            st.chat.splice(0, st.chat.length);
+            const firstUser = { name: 'User', mes: 'First turn', is_user: true, is_system: false, extra: {} };
+            st.chat.push(firstUser); await st.addOneMessage(firstUser);
+            await st.Generate('normal', { automatic_trigger: true });
+            await st.saveChatConditional();
+
+            // Reload chat from disk via actual /api/chats/get endpoint to exercise save -> reload -> next-turn path.
+            const getRes = await original('/api/chats/get', {
+                method: 'POST',
+                headers: st.getRequestHeaders(),
+                body: JSON.stringify({ avatar_url: character.avatar, file_name: file }),
+            });
+            const [, ...diskMessages] = await getRes.json();
+            st.chat.splice(0, st.chat.length, ...diskMessages);
+            await st.redisplayChat({ fade: false });
+            const reloadedPartial = JSON.parse(JSON.stringify(st.chat.find(m => m.extra?.vertex_generation)));
+
+            const secondUser = { name: 'User', mes: 'Second turn after reload', is_user: true, is_system: false, extra: {} };
+            st.chat.push(secondUser); await st.addOneMessage(secondUser);
+            await st.Generate('normal', { automatic_trigger: true });
+            return { executed, reloadedPartial, secondRequestBody: capturedBodies[1], finalReply: st.chat.at(-1).mes };
+        } finally {
+            window.fetch = original;
+            ToolManager.unregisterFunctionTool('phasec_unexecuted');
+        }
+    }, vertexResultFrame(partialTurn));
+
+    expect(result.executed).toBe(0);
+    expect(result.reloadedPartial.extra.vertex_response.parts).toEqual(partialParts);
+    expect(result.finalReply).toBe('Clean follow-up.');
+    const vertexBody = buildVertexRequest({ body: result.secondRequestBody });
+    const modelTurns = vertexBody.contents.filter(c => c.role === 'model');
+    expect(modelTurns).toHaveLength(1);
+    expect(modelTurns[0].parts).toEqual([
+        { thought: true, text: 'retained plan', thoughtSignature: 'PLAN_SIG' },
+        { text: 'Partial answer.', thoughtSignature: 'PARTIAL_SIG' },
+    ]);
+    expect(JSON.stringify(vertexBody.contents)).not.toContain('functionCall');
+});
+
+test('CONTENT character-name prefix survives native replay alongside signed Parts in actual Generate request', async ({ page }) => {
+    const result = await page.evaluate(async () => {
+        const st = await import('/script.js'), { oai_settings } = await import('/scripts/openai.js'), { power_user } = await import('/scripts/power-user.js');
+        await st.newAssistantChat({ temporary: true }); st.changeMainAPI('openai');
+        const character = { name: 'Alice', avatar: 'phasec-alice.png', chat: `phasec-alice-${crypto.randomUUID()}`, description: '', personality: '', scenario: '', first_mes: '', mes_example: '', data: { extensions: {} } };
+        st.characters.push(character); st.setCharacterId(st.characters.length - 1); st.setCharacterName('Alice');
+        const prevNamesBehavior = oai_settings.names_behavior;
+        Object.assign(oai_settings, { chat_completion_source: 'vertexai', vertexai_model: 'gemini-3.8-flash', stream_openai: true, function_calling: false,
+            show_thoughts: true, names_behavior: 1, openai_max_context: 131072, openai_max_tokens: 2048, custom_prompt_post_processing: '' });
+        Object.assign(power_user, { message_token_count_enabled: false, auto_continue: false, auto_swipe: false, stream_fade_in: false });
+        st.setOnlineStatus('gemini-3.8-flash');
+        const capturedBodies = [];
+        const original = window.fetch;
+        window.fetch = async (url, init) => {
+            if (url !== '/api/backends/chat-completions/generate') return original(url, init);
+            capturedBodies.push(JSON.parse(init.body));
+            const parts = capturedBodies.length === 1
+                ? [{ text: 'Hello.', thoughtSignature: 'ALICE_SIG' }]
+                : [{ text: 'Second reply.', thoughtSignature: 'ALICE_SIG_2' }];
+            const sse = `data: ${JSON.stringify({ candidates: [{ content: { role: 'model', parts }, finishReason: 'STOP' }] })}\n\ndata: ${JSON.stringify({ vertexMeta: { phase: 'completed', state: 'completed', model: 'gemini-3.8-flash' } })}\n\ndata: [DONE]\n\n`;
+            return new Response(sse, { headers: { 'Content-Type': 'text/event-stream' } });
+        };
+        try {
+            const u1 = { name: 'Bob', mes: 'Hi Alice', is_user: true, is_system: false, extra: {} };
+            st.chat.push(u1); await st.addOneMessage(u1);
+            await st.Generate('normal', { automatic_trigger: true });
+
+            const u2 = { name: 'Bob', mes: 'How are you?', is_user: true, is_system: false, extra: {} };
+            st.chat.push(u2); await st.addOneMessage(u2);
+            await st.Generate('normal', { automatic_trigger: true });
+            return { secondRequestBody: capturedBodies[1] };
+        } finally {
+            oai_settings.names_behavior = prevNamesBehavior;
+            window.fetch = original;
+        }
+    });
+
+    const vertexBody = buildVertexRequest({ body: result.secondRequestBody });
+    const modelTurns = vertexBody.contents.filter(c => c.role === 'model');
+    expect(modelTurns).toHaveLength(1);
+    expect(modelTurns[0].parts).toEqual([
+        { text: 'Alice: ' },
+        { text: 'Hello.', thoughtSignature: 'ALICE_SIG' },
+    ]);
 });

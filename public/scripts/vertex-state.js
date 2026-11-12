@@ -42,6 +42,14 @@ export function reusableVertexResponse(message, model) {
     return structuredClone(record);
 }
 
+/** Display messages never replay functionCall parts; tool calls replay only via paired tool_invocations carriers. */
+export function reusableVertexDisplayResponse(message, model) {
+    const response = reusableVertexResponse(message, model);
+    if (!response || !Array.isArray(response.parts)) return null;
+    response.parts = response.parts.filter(p => !p?.functionCall);
+    return response.parts.length ? response : null;
+}
+
 export function vertexToolResponse(invocations, model) {
     const record = invocations?.[0]?.vertex_response;
     const calls = record?.parts?.filter(p => p.functionCall).map(p => p.functionCall);

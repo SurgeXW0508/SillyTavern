@@ -7,12 +7,15 @@ import { setTimeout as sleep } from 'node:timers/promises';
 import { Response } from 'node-fetch';
 import { setConfigFilePath } from '../src/util.js';
 setConfigFilePath(fileURLToPath(new URL('../default/config.yaml', import.meta.url)));
-import { readFileSync } from 'node:fs';
+import { readFileSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 const { vertexOptions, buildVertexRequest, readVertexSse, VertexFunctionStream, VERTEX_LIMITS, isNoSamplingModel, rejectsPrefillModel } = await import('../src/endpoints/backends/vertex-protocol.js');
 const { createVertexGeneration, createVertexHandler, vertexResultFrame } = await import('../src/endpoints/backends/vertex-native.js');
 const { createVertexConnectionResolver, vertexHost, readVertexErrorEnvelope } = await import('../src/endpoints/backends/vertex-transport.js');
+const { getGoogleApiConfig, getVertexHost } = await import('../src/endpoints/google.js');
 const { convertGooglePrompt } = await import('../src/prompt-converters.js');
-const { appendVertexParts, vertexResponseRecord, applyVertexMessageState, reusableVertexResponse, vertexToolHistory, isUsableVertexPartial, hasUsableVertexParts } = await import('../public/scripts/vertex-state.js');
+const { appendVertexParts, vertexResponseRecord, applyVertexMessageState, reusableVertexResponse, reusableVertexDisplayResponse, vertexToolHistory, isUsableVertexPartial, hasUsableVertexParts } = await import('../public/scripts/vertex-state.js');
 const { updateVertexRuntime, formatVertexUsage, resetVertexRuntime } = await import('../public/scripts/vertex-ui.js');
 const base = { model: 'gemini-4-argon', stream: true, chat_completion_source: 'vertexai', max_tokens: 131072,
     messages: [{ role: 'user', content: 'PRIVATE_PROMPT' }], include_reasoning: true, reasoning_effort: 'low' };
@@ -538,3 +541,127 @@ test('hasUsableVertexParts and updateVertexRuntime handle empty failures, live w
     }
 });
 
+test('legacy getGoogleApiConfig shares getVertexHost validation and rejects malformed regions before reading credentials', async () => {
+    for (const [region, expected] of [
+        ['global', 'https://aiplatform.googleapis.com'],
+        ['us', 'https://aiplatform.us.rep.googleapis.com'],
+        ['eu', 'https://aiplatform.eu.rep.googleapis.com'],
+        ['us-central1', 'https://us-central1-aiplatform.googleapis.com'],
+        ['asia-northeast1', 'https://asia-northeast1-aiplatform.googleapis.com'],
+    ]) {
+        assert.equal(getVertexHost(region), expected);
+        assert.equal(vertexHost(region), expected);
+    }
+
+    for (const invalid of ['attacker.example/x?', 'https://evil.test', '../evil', 'us-central1.evil.com', '', null, 123, {}]) {
+        assert.equal(getVertexHost(invalid), null);
+        assert.throws(() => vertexHost(invalid), err => err.code === 'VERTEX_CONFIG');
+    }
+
+    let credentialReads = 0;
+    const poisonedUser = {
+        get directories() {
+            credentialReads++;
+            throw new Error('credentials must not be read when region is invalid');
+        },
+    };
+    for (const mode of ['express', 'full']) {
+        await assert.rejects(
+            () => getGoogleApiConfig({ body: { api: 'vertexai', vertexai_auth_mode: mode, vertexai_region: 'attacker.example/x?' }, user: poisonedUser }, 'gemini-2.5-flash'),
+            /Invalid Vertex AI region/,
+        );
+    }
+    assert.equal(credentialReads, 0);
+
+    const root = mkdtempSync(join(tmpdir(), 'st-vertex-google-cfg-'));
+    try {
+        writeFileSync(join(root, 'secrets.json'), JSON.stringify({
+            _migrated: true,
+            api_key_vertexai: [{ id: 'k1', value: 'SYNTHETIC-VERTEX-KEY', label: 'test', active: true }],
+        }));
+        await assert.rejects(
+            () => getGoogleApiConfig({ body: { api: 'vertexai', vertexai_auth_mode: 'express', vertexai_region: 'attacker.example/x?' }, user: { directories: { root } } }, 'gemini-2.5-flash'),
+            /Invalid Vertex AI region/,
+        );
+        for (const [region, expectedHost] of [
+            ['global', 'aiplatform.googleapis.com'],
+            ['us', 'aiplatform.us.rep.googleapis.com'],
+            ['eu', 'aiplatform.eu.rep.googleapis.com'],
+            ['us-central1', 'us-central1-aiplatform.googleapis.com'],
+        ]) {
+            const cfg = await getGoogleApiConfig({
+                body: { api: 'vertexai', vertexai_auth_mode: 'express', vertexai_region: region, vertexai_express_project_id: 'demo-proj' },
+                user: { directories: { root } },
+            }, 'gemini-2.5-flash');
+            assert.equal(new URL(cfg.url).host, expectedHost);
+            assert.equal(cfg.headers['x-goog-api-key'], 'SYNTHETIC-VERTEX-KEY');
+        }
+    } finally {
+        rmSync(root, { recursive: true, force: true });
+    }
+});
+
+test('reusableVertexDisplayResponse strips unexecuted functionCall parts while preserving vertexToolHistory and character-name prefixes', () => {
+    const model = 'gemini-3.8-flash';
+    const mixedParts = [
+        { thought: true, text: 'plan', thoughtSignature: 'PLAN_SIG' },
+        { text: 'Hello.', thoughtSignature: 'TEXT_SIG' },
+        { functionCall: { id: 'call-1', name: 'roll_dice', args: { sides: 20 } }, thoughtSignature: 'CALL_SIG' },
+    ];
+    const displayMsg = { name: 'Alice', mes: '', is_user: false, extra: {} };
+    applyVertexMessageState({ ...displayMsg, mes: 'Hello.' }, vertexResponseRecord(mixedParts, model), { state: 'partial', phase: 'partial' });
+    const partialMsg = { name: 'Alice', mes: 'Hello.', is_user: false, extra: {} };
+    const record = vertexResponseRecord(mixedParts, model);
+    applyVertexMessageState(partialMsg, record, { state: 'partial', phase: 'partial' });
+
+    // Raw storage keeps all parts, full helper sees all parts, display helper strips functionCall.
+    assert.equal(partialMsg.extra.vertex_response.parts.length, 3);
+    assert.equal(reusableVertexResponse(partialMsg, model).parts.length, 3);
+    assert.deepEqual(reusableVertexDisplayResponse(partialMsg, model).parts, [
+        { thought: true, text: 'plan', thoughtSignature: 'PLAN_SIG' },
+        { text: 'Hello.', thoughtSignature: 'TEXT_SIG' },
+    ]);
+
+    // Call-only display message returns null rather than an empty parts array.
+    const callOnlyMsg = { name: 'Alice', mes: '', is_user: false, extra: {} };
+    applyVertexMessageState(callOnlyMsg, vertexResponseRecord([{ functionCall: { id: 'c1', name: 'noop', args: {} }, thoughtSignature: 'ONLY_CALL' }], model), { state: 'partial' });
+    assert.equal(reusableVertexDisplayResponse(callOnlyMsg, model), null);
+
+    // Paired executed tool history still hides the unchanged display message and replays the complete native turn once.
+    const carrierMsg = {
+        name: 'System',
+        mes: '',
+        is_user: false,
+        extra: {
+            api: 'vertexai',
+            model,
+            tool_invocations: [{
+                id: 'call-1',
+                name: 'roll_dice',
+                parameters: JSON.stringify({ sides: 20 }),
+                result: '17',
+                vertex_response: structuredClone(partialMsg.extra.vertex_response),
+            }],
+        },
+    };
+    const history = vertexToolHistory([partialMsg, carrierMsg], model);
+    assert.equal(history.hiddenMessages.has(partialMsg), true);
+    assert.equal(history.responses.get(carrierMsg).parts.length, 3);
+
+    // Character-name prefixes stay separate unsigned text parts when promptText holds the unprefixed message text.
+    const replayPayload = {
+        ...reusableVertexDisplayResponse(partialMsg, model),
+        promptText: 'Hello.',
+    };
+    const names = { charName: 'Alice', userName: 'Bob', groupNames: [], startsWithGroupName: () => false };
+    const converted = convertGooglePrompt([
+        { role: 'user', content: 'Bob: Hi' },
+        { role: 'assistant', content: 'Alice: Hello.', vertex_response: replayPayload },
+        { role: 'user', content: 'Bob: Next' },
+    ], model, false, names, { nativeVertex: true });
+    assert.deepEqual(converted.contents[1].parts, [
+        { text: 'Alice: ' },
+        { thought: true, text: 'plan', thoughtSignature: 'PLAN_SIG' },
+        { text: 'Hello.', thoughtSignature: 'TEXT_SIG' },
+    ]);
+});

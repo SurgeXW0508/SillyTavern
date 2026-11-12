@@ -155,6 +155,19 @@ export function getProjectIdFromServiceAccount(serviceAccount) {
 }
 
 /**
+ * Resolves the official Vertex AI base origin for a validated region, or null if invalid.
+ * @param {unknown} region Vertex AI region identifier
+ * @returns {string|null} Official Vertex AI origin or null
+ */
+export function getVertexHost(region) {
+    if (typeof region !== 'string') return null;
+    if (region === 'global') return 'https://aiplatform.googleapis.com';
+    if (region === 'us' || region === 'eu') return `https://aiplatform.${region}.rep.googleapis.com`;
+    if (!/^[a-z]+-[a-z]+\d+$/.test(region)) return null;
+    return `https://${region}-aiplatform.googleapis.com`;
+}
+
+/**
  * Generates Google API URL and headers based on request configuration
  * @param {express.Request} request Express request object
  * @param {string} model Model name to use
@@ -174,6 +187,11 @@ export async function getGoogleApiConfig(request, model, endpoint = 'generateCon
     };
 
     if (useVertexAi) {
+        const vertexOrigin = request.body.reverse_proxy ? null : getVertexHost(region);
+        if (!request.body.reverse_proxy && !vertexOrigin) {
+            throw new Error('Invalid Vertex AI region.');
+        }
+
         // Get authentication for Vertex AI
         const { authHeader, authType } = await getVertexAIAuth(request);
 
@@ -181,9 +199,7 @@ export async function getGoogleApiConfig(request, model, endpoint = 'generateCon
             // Express mode: use API key parameter
             const keyParam = authHeader.replace('Bearer ', '');
             const projectId = request.body.vertexai_express_project_id;
-            baseUrl = region === 'global'
-                ? 'https://aiplatform.googleapis.com/v1'
-                : `https://${region}-aiplatform.googleapis.com/v1`;
+            baseUrl = `${vertexOrigin}/v1`;
             url = projectId
                 ? `${baseUrl}/projects/${projectId}/locations/${region}/publishers/google/models/${model}:${endpoint}`
                 : `${baseUrl}/publishers/google/models/${model}:${endpoint}`;
@@ -203,10 +219,7 @@ export async function getGoogleApiConfig(request, model, endpoint = 'generateCon
             } catch (error) {
                 throw new Error('Failed to extract project ID from Service Account JSON.');
             }
-            // Handle global region differently - no region prefix in hostname
-            baseUrl = region === 'global'
-                ? 'https://aiplatform.googleapis.com/v1'
-                : `https://${region}-aiplatform.googleapis.com/v1`;
+            baseUrl = `${vertexOrigin}/v1`;
             url = `${baseUrl}/projects/${projectId}/locations/${region}/publishers/google/models/${model}:${endpoint}`;
             headers['Authorization'] = authHeader;
         } else {

@@ -3,16 +3,15 @@
 import fetch from 'node-fetch';
 import { createHash } from 'node:crypto';
 import { readSecret, SECRET_KEYS } from '../secrets.js';
-import { generateJWTToken, getProjectIdFromServiceAccount } from '../google.js';
+import { generateJWTToken, getProjectIdFromServiceAccount, getVertexHost } from '../google.js';
 import { getUntrustedRequestAgent } from '../../private-request-filter.js';
 import { getConfigValue } from '../../util.js';
 import { VertexError } from './vertex-protocol.js';
 
 export function vertexHost(region) {
-    if (region === 'global') return 'https://aiplatform.googleapis.com';
-    if (region === 'us' || region === 'eu') return `https://aiplatform.${region}.rep.googleapis.com`;
-    if (!/^[a-z]+-[a-z]+\d+$/.test(region)) throw new VertexError('VERTEX_CONFIG', 'Invalid Vertex region.', 400);
-    return `https://${region}-aiplatform.googleapis.com`;
+    const host = getVertexHost(region);
+    if (!host) throw new VertexError('VERTEX_CONFIG', 'Invalid Vertex region.', 400);
+    return host;
 }
 
 const ALLOWED_RPC_STATUSES = new Set([
