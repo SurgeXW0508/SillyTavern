@@ -14,7 +14,7 @@ ghcr.io/surgexw0508/sillytavern-personal@sha256:22973f7169fa694a0894b054e2b754cc
 
 2026-11-12再次核验：容器状态为`running`、RestartCount为0；Compose 标签确认项目名为`sillytavern`，WorkingDir为`/vol3/1000/SillyTavern`，配置文件为`/vol3/1000/SillyTavern/docker-compose.yml`。挂载仍将宿主机的`config`、`data`、`plugins`、`extensions`分别映射到容器对应目录；视频目录以只读方式挂载。飞牛 Docker 已正式管理该 Compose 项目，无需迁移管理方式。
 
-NAS Tools实际为`personal/stable@2f6a9c54d2c906b4a0e44d20c12d0712552e393d`，origin为个人Fork，tracking为`origin/personal/stable`，工作区clean；BaiBaoKu当前Runtime为上游等价0.7.3/`b211a4e97fdaec24dc8b90c85ddc198fac9ac200`；NAS仍使用原作者origin并处于detached HEAD，个人Fork的`personal/stable`已建立但尚未切换。Tools仓库维护HEAD `ac1279a7`仅改AGENTS链接，不能把它写成NAS已安装SHA。
+NAS Tools实际为`personal/stable@2f6a9c54d2c906b4a0e44d20c12d0712552e393d`，origin为个人Fork，tracking为`origin/personal/stable`，工作区clean。此后本轮在Tools个人stable分支增加的Runbook、AGENTS和README均为文档变更，不包含Runtime或`dist`；NAS实际SHA仍为`2f6a9c54`。BaiBaoKu当前Runtime为上游等价0.7.3/`b211a4e97fdaec24dc8b90c85ddc198fac9ac200`；NAS仍使用原作者origin并处于detached HEAD，个人Fork的`personal/stable`已建立但尚未切换。
 
 正式镜像只确认启动、Health、Vertex普通RP正文生成和刷新后聊天记录保留。Candidate多轮/Stop/Regenerate等历史测试单独记录，未在正式环境复验的能力不标通过。生产数据恢复和安全评估也不由healthy状态代替。
 
@@ -133,7 +133,7 @@ Runtime故障优先回到上一个已验证镜像，同时确认Tools/BaiBaoKu�
 | 部分Vertex及非Vertex能力未正式验收 | 对应能力变化或确有使用需要时，由维护者/用户补受影响组合验证，不追增本轮开发 |
 | 既有启动日志`listen is enabled but private request filter is disabled`尚未单独评估 | 部署维护者在独立安全审查中判断；本轮只记录，不推断原因/暴露范围或调整配置 |
 
-基本部署验收完成不等于备份、GUI、安全和所有可选能力已验收。临时资产保持保留，Production Baseline的cleanup_allowed继续为false；本轮不授权删除任何文件、镜像或备份。
+基本部署验收完成不等于备份/恢复、安全和所有可选能力已验收。飞牛Compose GUI更新流程已确认；Backrest自动备份与恢复验证、真实生产数据恢复演练和安全评估仍未完成。临时资产保持保留，Production Baseline的cleanup_allowed继续为false；本轮不授权删除任何文件、镜像或备份。
 
 ## 本轮文档状态
 
