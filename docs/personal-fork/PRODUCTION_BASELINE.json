@@ -44,7 +44,11 @@
     "baibaoku_personal_fork_repository": "SurgeXW0508/baibaoku",
     "baibaoku_personal_fork_main_sha": "b211a4e97fdaec24dc8b90c85ddc198fac9ac200",
     "baibaoku_personal_stable_created_from": "main",
-    "baibaoku_personal_stable_runtime_base_sha": "b211a4e97fdaec24dc8b90c85ddc198fac9ac200"
+    "baibaoku_personal_stable_runtime_base_sha": "b211a4e97fdaec24dc8b90c85ddc198fac9ac200",
+    "tools_personal_stable_remote_head": "2816699503d8bbab1e601f955ecefe30d8b2e57d",
+    "tools_personal_stable_remote_head_note": "Documentation-only maintenance commits after the NAS-installed runtime SHA; no Runtime or dist change. NAS actual SHA remains tools_sha.",
+    "baibaoku_personal_stable_head": "4814830f2d161dfff89e75370effa31d669586d9",
+    "baibaoku_personal_stable_head_note": "Documentation-only commits after the upstream-equivalent runtime base; NAS has not switched to this fork."
   },
   "target_release": {
     "tag": "v1.19.0-personal.1",
@@ -138,9 +142,13 @@
     }
   ],
   "documentation_closeout": {
-    "status": "pending_independent_review",
+    "status": "three_repository_maintenance_runbooks_added",
     "scope": "documentation_only",
-    "evidence_source": "user_provided_nas_results_2026-11-09"
+    "updated_at": "2026-11-12",
+    "runtime_changes": false,
+    "ghcr_release_or_publish": false,
+    "nas_deployment": false,
+    "evidence_source": "user_provided_nas_inspection_and_live_github_branch_checks"
   },
   "formal_acceptance": {
     "source": "user_provided_nas_results_2026-11-09",
@@ -199,5 +207,20 @@
     "source": "user_reported_existing_startup_warning",
     "assessment": "not_separately_assessed",
     "owner": "deployment_maintainer_in_a_separate_security_review"
+  },
+  "repository_heads": {
+    "verified_at": "2026-11-12",
+    "sillytavern_release": "d090e0c94eaf46bd7461fa6a2e89fd75713be38f",
+    "sillytavern_upstream_release": "06bde939fb1e9c4c8d8641d810f0a916b5bce127",
+    "tools_main": "1e87dfaad87819a90d8032530a62a2ed29f97aea",
+    "tools_personal_stable": "2816699503d8bbab1e601f955ecefe30d8b2e57d",
+    "tools_nas_installed_sha": "2f6a9c54d2c906b4a0e44d20c12d0712552e393d",
+    "tools_personal_stable_delta_from_nas": "documentation_only",
+    "baibaoku_main": "b211a4e97fdaec24dc8b90c85ddc198fac9ac200",
+    "baibaoku_personal_stable": "4814830f2d161dfff89e75370effa31d669586d9",
+    "baibaoku_nas_installed_sha": "b211a4e97fdaec24dc8b90c85ddc198fac9ac200",
+    "baibaoku_nas_origin": "baibai-git/baibaoku",
+    "baibaoku_nas_branch": "detached",
+    "baibaoku_personal_stable_delta_from_runtime_base": "documentation_only"
   }
 }
