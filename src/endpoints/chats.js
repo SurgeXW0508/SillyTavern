@@ -380,6 +380,42 @@ async function checkChatIntegrity(filePath, integritySlug) {
  */
 
 /**
+ * Creates a single-pass stateful fragment matcher for one chat file.
+ * Lowercases each message line once and tracks remaining unmatched fragments
+ * in O(1) memory while preserving cross-message AND semantics.
+ * @param {string[]} fragments - Lowercased search fragments
+ * @returns {ChatMatchFunction & { incremental?: boolean }} Incremental matcher
+ */
+export function createChatFragmentMatcher(fragments) {
+    if (!Array.isArray(fragments) || fragments.length === 0) {
+        /** @type {ChatMatchFunction & { incremental?: boolean }} */
+        const matchAll = () => true;
+        matchAll.incremental = true;
+        return matchAll;
+    }
+
+    const remaining = new Set(fragments);
+    /** @type {ChatMatchFunction & { incremental?: boolean }} */
+    const matchLine = (textArray) => {
+        if (remaining.size === 0) {
+            return true;
+        }
+        const latest = String(textArray[textArray.length - 1] ?? '').toLowerCase();
+        if (!latest) {
+            return false;
+        }
+        for (const fragment of remaining) {
+            if (latest.includes(fragment)) {
+                remaining.delete(fragment);
+            }
+        }
+        return remaining.size === 0;
+    };
+    matchLine.incremental = true;
+    return matchLine;
+}
+
+/**
  * Reads the information from a chat file.
  * @param {string} pathToFile - Path to the chat file
  * @param {object} additionalData - Additional data to include in the result
@@ -453,6 +489,7 @@ export async function getChatInfo(pathToFile, additionalData = {}, withMetadata 
         let lastLine;
         let itemCounter = 0;
         let hasAnyMatch = false;
+        const isIncrementalMatcher = Boolean(hasMatcher && /** @type {any} */ (matcher).incremental);
         let matchBuffer = [];
         rl.on('line', (line) => {
             if (withMetadata && itemCounter === 0) {
@@ -465,10 +502,17 @@ export async function getChatInfo(pathToFile, additionalData = {}, withMetadata 
             if (hasMatcher && !hasAnyMatch && itemCounter > 0) {
                 const jsonData = tryParse(line);
                 if (jsonData) {
-                    matchBuffer.push(jsonData.mes || '');
-                    if (matcher(matchBuffer)) {
-                        hasAnyMatch = true;
-                        matchBuffer = [];
+                    const mesText = jsonData.mes || '';
+                    if (isIncrementalMatcher) {
+                        if (matcher([mesText])) {
+                            hasAnyMatch = true;
+                        }
+                    } else {
+                        matchBuffer.push(mesText);
+                        if (matcher(matchBuffer)) {
+                            hasAnyMatch = true;
+                            matchBuffer = [];
+                        }
                     }
                 }
             }
@@ -1027,9 +1071,11 @@ router.post('/search', validateAvatarUrlMiddleware, async function (request, res
         };
 
         for (const chatFile of chatFiles) {
-            const matcher = query ? hasTextMatch : null;
+            const fileId = path.parse(chatFile).name;
+            const filenameMatched = Boolean(query) && hasTextMatch([fileId]);
+            const matcher = (!query || filenameMatched) ? null : createChatFragmentMatcher(fragments);
             const chatInfo = await getChatInfo(chatFile, {}, false, matcher);
-            const hasMatch = chatInfo.match || hasTextMatch([chatInfo.file_id ?? '']);
+            const hasMatch = filenameMatched || chatInfo.match || hasTextMatch([chatInfo.file_id ?? '']);
 
             // Skip corrupted or invalid chat files
             if (!chatInfo.file_name) {

@@ -127,4 +127,36 @@ describe('getChatInfo', () => {
         expect(nonMatching.match).toBe(false);
         expect(nonMatching.file_name).toBe('chat.jsonl');
     });
+
+    test('createChatFragmentMatcher matches multi-fragment AND across distinct messages in a single pass', async () => {
+        const lines = [
+            JSON.stringify({ user_name: 'User', character_name: 'Char', chat_metadata: {} }),
+            JSON.stringify({ name: 'Char', is_user: false, mes: 'Alpha token appears early', send_date: '2026-01-01T00:00:00.000Z' }),
+            ...Array.from({ length: 200 }, (_, idx) => JSON.stringify({
+                name: 'User',
+                is_user: true,
+                mes: `Filler turn ${idx}`,
+                send_date: '2026-01-01T00:01:00.000Z',
+            })),
+            JSON.stringify({ name: 'Char', is_user: false, mes: 'Omega token appears at the end', send_date: '2026-01-02T00:00:00.000Z' }),
+        ];
+        fs.writeFileSync(chatFile, lines.join('\n'));
+
+        const hitInfo = await chats.getChatInfo(
+            chatFile,
+            {},
+            false,
+            chats.createChatFragmentMatcher(['alpha', 'omega']),
+        );
+        expect(hitInfo.match).toBe(true);
+        expect(hitInfo.chat_items).toBe(202);
+
+        const partialMissInfo = await chats.getChatInfo(
+            chatFile,
+            {},
+            false,
+            chats.createChatFragmentMatcher(['alpha', 'missing-fragment']),
+        );
+        expect(partialMissInfo.match).toBe(false);
+    });
 });

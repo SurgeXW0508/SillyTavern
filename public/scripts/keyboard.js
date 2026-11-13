@@ -33,28 +33,123 @@ if (CSS.supports('selector(:has(*))')) {
     interactableSelectors.push('#extensionsMenu div:has(.extensionsMenuExtensionButton)');
 }
 
+let combinedInteractableSelector = interactableSelectors.join(', ');
+
 export const INTERACTABLE_CONTROL_CLASS = 'interactable';
 export const CUSTOM_INTERACTABLE_CONTROL_CLASS = 'custom_interactable';
 
 export const NOT_FOCUSABLE_CONTROL_CLASS = 'not_focusable';
 export const DISABLED_CONTROL_CLASS = 'disabled';
 
+const KEYBOARD_FULL_SCAN_THRESHOLD = 40;
+/** @type {Set<Element>} */
+const pendingKeyboardNodes = new Set();
+let keyboardFlushScheduled = false;
+/** @type {WeakSet<Element>} */
+const initializedScrollResetContainers = new WeakSet();
+
+/**
+ * Schedules a single animation-frame pass to initialize queued DOM subtrees.
+ */
+function scheduleKeyboardNodeFlush() {
+    if (keyboardFlushScheduled) {
+        return;
+    }
+    keyboardFlushScheduled = true;
+    const schedule = typeof requestAnimationFrame === 'function'
+        ? requestAnimationFrame
+        : (cb) => setTimeout(cb, 16);
+    schedule(flushPendingKeyboardNodes);
+}
+
+/**
+ * Processes queued DOM nodes once per frame, collapsing ancestor and storm scans.
+ */
+export function flushPendingKeyboardNodes() {
+    keyboardFlushScheduled = false;
+    if (pendingKeyboardNodes.size === 0) {
+        return;
+    }
+
+    /** @type {Element[]} */
+    const connectedNodes = [];
+    for (const node of pendingKeyboardNodes) {
+        if (node.isConnected) {
+            connectedNodes.push(node);
+        }
+    }
+    pendingKeyboardNodes.clear();
+
+    if (connectedNodes.length === 0) {
+        return;
+    }
+
+    if (document.body && (connectedNodes.includes(document.body) || connectedNodes.length > KEYBOARD_FULL_SCAN_THRESHOLD)) {
+        handleNodeChange(document.body);
+        return;
+    }
+
+    const rootSet = new Set(connectedNodes);
+    for (const node of connectedNodes) {
+        let ancestor = node.parentElement;
+        let coveredByAncestor = false;
+        while (ancestor) {
+            if (rootSet.has(ancestor)) {
+                coveredByAncestor = true;
+                break;
+            }
+            ancestor = ancestor.parentElement;
+        }
+        if (!coveredByAncestor) {
+            handleNodeChange(node);
+        }
+    }
+}
+
+/**
+ * Checks whether a class mutation toggled focus-inhibiting state classes on an ancestor container.
+ * @param {Element} target
+ * @param {string|null} oldValue
+ * @returns {boolean}
+ */
+function hasFocusStateClassChanged(target, oldValue) {
+    if (typeof oldValue !== 'string') {
+        return target.classList.contains(DISABLED_CONTROL_CLASS) || target.classList.contains(NOT_FOCUSABLE_CONTROL_CLASS);
+    }
+    const prevClasses = oldValue.split(/\s+/);
+    return prevClasses.includes(DISABLED_CONTROL_CLASS) !== target.classList.contains(DISABLED_CONTROL_CLASS)
+        || prevClasses.includes(NOT_FOCUSABLE_CONTROL_CLASS) !== target.classList.contains(NOT_FOCUSABLE_CONTROL_CLASS);
+}
+
 /**
  * An observer that will check if any new interactables or scroll reset containers are added to the body
  * @type {MutationObserver}
  */
 const observer = new MutationObserver(mutations => {
-    mutations.forEach(mutation => {
+    for (const mutation of mutations) {
         if (mutation.type === 'childList') {
-            mutation.addedNodes.forEach(handleNodeChange);
-        }
-        if (mutation.type === 'attributes') {
+            for (const addedNode of mutation.addedNodes) {
+                if (addedNode.nodeType === Node.ELEMENT_NODE && addedNode instanceof Element) {
+                    pendingKeyboardNodes.add(addedNode);
+                }
+            }
+        } else if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
             const target = mutation.target;
-            if (mutation.attributeName === 'class' && target instanceof Element) {
-                handleNodeChange(target);
+            if (target instanceof Element) {
+                if (target.closest('#chat')
+                    && !isKeyboardInteractable(target)
+                    && !target.classList.contains('scroll-reset-container')
+                    && !hasFocusStateClassChanged(target, mutation.oldValue)) {
+                    continue;
+                }
+                pendingKeyboardNodes.add(target);
             }
         }
-    });
+    }
+
+    if (pendingKeyboardNodes.size > 0) {
+        scheduleKeyboardNodeFlush();
+    }
 });
 
 /**
@@ -88,6 +183,7 @@ function handleNodeChange(node) {
  */
 export function registerInteractableType(interactableSelector, { disabledByDefault = false, notFocusableByDefault = false } = {}) {
     interactableSelectors.push(interactableSelector);
+    combinedInteractableSelector = interactableSelectors.join(', ');
 
     const interactables = document.querySelectorAll(interactableSelector);
 
@@ -109,7 +205,7 @@ export function registerInteractableType(interactableSelector, { disabledByDefau
  */
 export function isKeyboardInteractable(control) {
     // Check if this control matches any of the selectors
-    return interactableSelectors.some(selector => control.matches(selector));
+    return control.matches(combinedInteractableSelector);
 }
 
 /**
@@ -175,8 +271,7 @@ function initializeInteractables(element = document) {
  * @returns {HTMLElement[]} An array containing all the interactables that match the given selectors
  */
 function getAllInteractables(element) {
-    // Query each selector individually and combine all to a big array to return
-    return [].concat(...interactableSelectors.map(selector => Array.from(element.querySelectorAll(`${selector}`))));
+    return Array.from(element.querySelectorAll(combinedInteractableSelector));
 }
 
 /**
@@ -184,7 +279,12 @@ function getAllInteractables(element) {
  * @param {Element} container - The container
  */
 const applyScrollResetBehavior = (container) => {
-    container.addEventListener('focusout', (e) => {
+    if (initializedScrollResetContainers.has(container)) {
+        return;
+    }
+    initializedScrollResetContainers.add(container);
+
+    container.addEventListener('focusout', () => {
         setTimeout(() => {
             const focusedElement = document.activeElement;
             if (!container.contains(focusedElement)) {
@@ -242,6 +342,7 @@ export function initKeyboard() {
         childList: true,
         subtree: true,
         attributes: true,
+        attributeOldValue: true,
         attributeFilter: ['class'],
     });
 

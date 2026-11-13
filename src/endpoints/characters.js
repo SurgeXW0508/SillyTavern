@@ -188,6 +188,7 @@ async function readCharacterData(inputFile, inputFormat = 'png') {
             const cache = await diskCache.instance();
             const cachedData = await cache.getItem(cacheKey);
             if (cachedData) {
+                !isAndroid && memoryCache.set(cacheKey, cachedData);
                 return cachedData;
             }
         } catch (error) {
