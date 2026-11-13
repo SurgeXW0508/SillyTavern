@@ -2,7 +2,17 @@ import { test, expect } from '@playwright/test';
 import { testSetup } from './frontent-test-utils.js';
 
 test.describe('World Info Editor Switch & OriginalData Sync', () => {
-    test.beforeEach(testSetup.awaitST);
+    test.beforeEach(async ({ page }) => {
+        await page.route('**/api/settings/get', async route => {
+            const response = await route.fetch();
+            const data = await response.json();
+            const settings = JSON.parse(data.settings || '{}');
+            settings.firstRun = false;
+            data.settings = JSON.stringify(settings);
+            await route.fulfill({ response, json: data });
+        });
+        await testSetup.awaitST({ page });
+    });
 
     test('switches lorebooks cleanly, isolates cache clones, syncs originalData by uid, and filters via Set', async ({ page }) => {
         const bookA = 'STAGE_PERF_SWITCH_A';
@@ -110,7 +120,7 @@ test.describe('World Info Editor Switch & OriginalData Sync', () => {
                     .get();
                 firstKeySelect.select2('close');
 
-                // Verify WeakMap uid index syncs across edit, push, delete, and in-place replacement
+                // Verify WeakMap uid->index syncs across edit, push, delete, in-place middle replacement, and uid mutation
                 const tracked = {
                     entries: {},
                     originalData: {
@@ -129,6 +139,18 @@ test.describe('World Info Editor Switch & OriginalData Sync', () => {
                 setWIOriginalDataValue(tracked, 1, 'comment', 'should-not-resurrect');
                 setWIOriginalDataValue(tracked, 2, 'comment', 'two-updated');
 
+                // S1-a: Replace middle element (index 1, uid 2) in place without changing length/first/last
+                const detachedOldTwo = tracked.originalData.entries[1];
+                const replacedMiddleTwo = { ...detachedOldTwo, comment: 'two-replaced-obj' };
+                tracked.originalData.entries[1] = replacedMiddleTwo;
+                setWIOriginalDataValue(tracked, 2, 'comment', 'two-written-on-new-obj');
+                const replacedMiddleStepAComment = replacedMiddleTwo.comment;
+
+                // S1-b: Mutate an entry's uid in place and write using the new uid
+                tracked.originalData.entries[1].uid = 202;
+                setWIOriginalDataValue(tracked, 202, 'comment', 'two-written-after-uid-change');
+                setWIOriginalDataValue(tracked, 2, 'comment', 'stale-uid-must-noop');
+
                 // Verify FilterHelper wiSearchFilter Set lookup preserves ordering & subset
                 const filterHelper = new FilterHelper(() => {});
                 filterHelper.setFilterData(FILTER_TYPES.WORLD_INFO_SEARCH, 'Beta Entry 1');
@@ -142,7 +164,9 @@ test.describe('World Info Editor Switch & OriginalData Sync', () => {
                     countA2,
                     renderedKeyTexts,
                     remainingOriginalUids: tracked.originalData.entries.map(e => e.uid),
-                    updatedTwo: tracked.originalData.entries.find(e => e.uid === 2)?.comment,
+                    detachedOldTwoComment: detachedOldTwo.comment,
+                    replacedMiddleStepAComment,
+                    replacedMiddleFinalComment: tracked.originalData.entries[1].comment,
                     updatedThree: tracked.originalData.entries.find(e => e.uid === 3)?.comment,
                     filteredUids: filtered.map(e => e.uid),
                     filteredAllMatchB: filtered.every(e => sampleEntries.includes(e)),
@@ -163,8 +187,10 @@ test.describe('World Info Editor Switch & OriginalData Sync', () => {
         expect(result.countA2).toBe(5);
         expect(result.renderedKeyTexts[0]).toContain('shared_key');
         expect(result.renderedKeyTexts.some(t => t.includes('beta_'))).toBe(false);
-        expect(result.remainingOriginalUids).toEqual([0, 2, 3]);
-        expect(result.updatedTwo).toBe('two-updated');
+        expect(result.remainingOriginalUids).toEqual([0, 202, 3]);
+        expect(result.detachedOldTwoComment).toBe('two-updated');
+        expect(result.replacedMiddleStepAComment).toBe('two-written-on-new-obj');
+        expect(result.replacedMiddleFinalComment).toBe('two-written-after-uid-change');
         expect(result.updatedThree).toBe('three-updated');
         expect(result.filteredUids.length).toBeGreaterThan(0);
         expect(result.filteredAllMatchB).toBe(true);
