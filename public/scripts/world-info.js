@@ -2052,7 +2052,7 @@ export async function loadWorldInfo(name) {
     if (response.ok) {
         const data = await response.json();
         worldInfoCache.set(name, data);
-        return data;
+        return worldInfoCache.get(name);
     }
 
     return null;
@@ -2215,6 +2215,25 @@ function nullWorldInfo() {
 
 /** @type {Select2Option[]} Cache all keys as selectable dropdown option */
 const worldEntryKeyOptionsCache = [];
+/** @type {Map<string, Select2Option>} */
+const worldEntryKeyOptionsMap = new Map();
+let worldEntryKeyOptionsDirty = false;
+
+/**
+ * Returns the sorted Select2 key options cache, rebuilding lazily when modified.
+ * @returns {Select2Option[]}
+ */
+function getWorldEntryKeyOptionsCache() {
+    if (worldEntryKeyOptionsDirty) {
+        worldEntryKeyOptionsCache.length = 0;
+        for (const entry of worldEntryKeyOptionsMap.values()) {
+            worldEntryKeyOptionsCache.push(entry);
+        }
+        worldEntryKeyOptionsCache.sort((a, b) => b.count - a.count || a.text.localeCompare(b.text));
+        worldEntryKeyOptionsDirty = false;
+    }
+    return worldEntryKeyOptionsCache;
+}
 
 /**
  * Update the cache and all select options for the keys with new values to display
@@ -2224,50 +2243,46 @@ const worldEntryKeyOptionsCache = [];
  * @param {boolean?} [options.reset=false] - Whether the cache should be reset. Reset will also not trigger update of the controls, as we expect them to be redrawn anyway
  */
 function updateWorldEntryKeyOptionsCache(keyOptions, { remove = false, reset = false } = {}) {
+    if (reset) {
+        worldEntryKeyOptionsMap.clear();
+        worldEntryKeyOptionsCache.length = 0;
+        worldEntryKeyOptionsDirty = false;
+    }
     if (!keyOptions.length) return;
-    /** @type {Select2Option[]} */
-    const options = keyOptions.map(x => typeof x === 'string' ? { id: getSelect2OptionId(x), text: x } : x);
-    if (reset) worldEntryKeyOptionsCache.length = 0;
-    options.forEach(option => {
-        // Update the cache list
-        let cachedEntry = worldEntryKeyOptionsCache.find(x => x.id == option.id);
-        if (cachedEntry) {
-            cachedEntry.count += !remove ? 1 : -1;
-        } else if (!remove) {
-            worldEntryKeyOptionsCache.push(option);
-            cachedEntry = option;
-            cachedEntry.count = 1;
-        }
-    });
 
-    // Sort by count DESC and then alphabetically
-    worldEntryKeyOptionsCache.sort((a, b) => b.count - a.count || a.text.localeCompare(b.text));
+    const delta = !remove ? 1 : -1;
+    for (let i = 0; i < keyOptions.length; i++) {
+        const raw = keyOptions[i];
+        /** @type {Select2Option} */
+        const option = typeof raw === 'string' ? { id: getSelect2OptionId(raw), text: raw } : raw;
+        const key = String(option.id);
+        const cachedEntry = worldEntryKeyOptionsMap.get(key);
+        if (cachedEntry) {
+            cachedEntry.count += delta;
+            worldEntryKeyOptionsDirty = true;
+        } else if (!remove) {
+            option.count = 1;
+            worldEntryKeyOptionsMap.set(key, option);
+            worldEntryKeyOptionsDirty = true;
+        }
+    }
 }
 
 function clearEntryList($list) {
-    console.time('clearEntryList');
-
     // List already empty, skipping cleanup
-    if (!$list.children().length) {
-        console.timeEnd('clearEntryList');
+    if (!$list?.length || !$list[0]?.childNodes?.length) {
         return;
     }
 
     // Unsubscribe from toggle events, so that mass open won't create new drawers
     $list.find('.inline-drawer').off('inline-drawer-toggle');
 
-    // Step 1: Clean all <option> elements within <select>
-    $list.find('option').each(function () {
-        const $option = $(this);
-        $option.off();
-        $.cleanData([$option[0]]);
-        $option.remove();
-    });
-
-    // Step 2: Clean all <select> elements
+    // Destroy initialized Select2 instances before container removal so global listeners/portals are released
     $list.find('select').each(function () {
+        if (!$.hasData(this)) {
+            return;
+        }
         const $select = $(this);
-        // Remove Select2-related data and container if present
         if ($select.data('select2')) {
             try {
                 $select.select2('destroy');
@@ -2275,35 +2290,10 @@ function clearEntryList($list) {
                 console.debug('Select2 destroy failed:', e);
             }
         }
-        const $container = $select.parent();
-        if ($container.length) {
-            $container.find('*').off();
-            $.cleanData($container.find('*').get());
-            $container.remove();
-        }
-
-        $select.off();
-        $.cleanData([$select[0]]);
     });
 
-    // Step 3: Clean <div>, <span>, <input>
-    $list.find('div, span, input').each(function () {
-        const $elem = $(this);
-        $elem.off();
-        $.cleanData([$elem[0]]);
-        $elem.remove();
-    });
-
-    const totalElementsOfAnyKindLeftInList = $list.children().length;
-
-    // Final cleanup
-    if (totalElementsOfAnyKindLeftInList) {
-        console.time('empty');
-        $list.empty();
-        console.timeEnd('empty');
-    }
-
-    console.timeEnd('clearEntryList');
+    // jQuery.empty() cleans jQuery data/events/widgets across all descendants in one flat pass and clears child nodes
+    $list.empty();
 }
 
 //MARK: displayWorldEntries
@@ -2743,6 +2733,33 @@ function verifyWorldInfoSearchSortRule() {
     }
 }
 
+/** @type {WeakMap<any[], { length: number, first: any, last: any, byUid: Map<any, object> }>} */
+const wiOriginalEntriesIndexCache = new WeakMap();
+
+/**
+ * Returns a uid->entry lookup map for `data.originalData.entries`, rebuilding if mutated.
+ * @param {any[]} entries
+ * @returns {Map<any, object>}
+ */
+function getWIOriginalEntriesIndex(entries) {
+    const len = entries.length;
+    const first = len > 0 ? entries[0] : undefined;
+    const last = len > 0 ? entries[len - 1] : undefined;
+    let cached = wiOriginalEntriesIndexCache.get(entries);
+    if (!cached || cached.length !== len || cached.first !== first || cached.last !== last) {
+        const byUid = new Map();
+        for (let i = 0; i < len; i++) {
+            const entry = entries[i];
+            if (entry && typeof entry === 'object' && !byUid.has(entry.uid)) {
+                byUid.set(entry.uid, entry);
+            }
+        }
+        cached = { length: len, first, last, byUid };
+        wiOriginalEntriesIndexCache.set(entries, cached);
+    }
+    return cached.byUid;
+}
+
 /**
  * Sets the value of a specific key in the original data entry corresponding to the given uid
  * This needs to be called whenever you update JSON data fields.
@@ -2755,7 +2772,13 @@ function verifyWorldInfoSearchSortRule() {
  */
 export function setWIOriginalDataValue(data, uid, key, value) {
     if (data.originalData && Array.isArray(data.originalData.entries)) {
-        let originalEntry = data.originalData.entries.find(x => x.uid === uid);
+        const entries = data.originalData.entries;
+        const byUid = getWIOriginalEntriesIndex(entries);
+        let originalEntry = byUid.get(uid);
+        if (originalEntry && originalEntry.uid !== uid) {
+            wiOriginalEntriesIndexCache.delete(entries);
+            originalEntry = getWIOriginalEntriesIndex(entries).get(uid);
+        }
 
         if (!originalEntry) {
             return;
@@ -2779,6 +2802,7 @@ export function deleteWIOriginalDataValue(data, uid) {
 
         if (originalIndex >= 0) {
             data.originalData.entries.splice(originalIndex, 1);
+            wiOriginalEntriesIndexCache.delete(data.originalData.entries);
         }
     }
 }
@@ -2962,7 +2986,7 @@ function enableKeysInputHelper({ template, entry, entryPropName, originalDataVal
     if (isFancyInput) {
         select2ModifyOptions(input, entry[entryPropName], { select: true, changeEventArgs: { skipReset: true, noSave: true } });
         input.select2({
-            ajax: dynamicSelect2DataViaAjax(() => worldEntryKeyOptionsCache),
+            ajax: dynamicSelect2DataViaAjax(() => getWorldEntryKeyOptionsCache()),
             tags: true,
             tokenSeparators: [','],
             // @ts-ignore

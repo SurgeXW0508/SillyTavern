@@ -34,6 +34,37 @@ export function readWorldInfoFile(directories, worldInfoName, allowDummy) {
     return worldInfo;
 }
 
+/**
+ * Asynchronously reads a World Info file and returns its contents
+ * @param {import('../users.js').UserDirectoryList} directories User directories
+ * @param {string} worldInfoName Name of the World Info file
+ * @param {boolean} allowDummy If true, returns an empty object if the file doesn't exist
+ * @returns {Promise<object>} World Info file contents
+ */
+export async function readWorldInfoFileAsync(directories, worldInfoName, allowDummy) {
+    const dummyObject = allowDummy ? { entries: {} } : null;
+
+    if (!worldInfoName) {
+        return dummyObject;
+    }
+
+    const filename = sanitize(`${worldInfoName}.json`);
+    const pathToWorldInfo = path.join(directories.worlds, filename);
+
+    let worldInfoText;
+    try {
+        worldInfoText = await fs.promises.readFile(pathToWorldInfo, 'utf8');
+    } catch (err) {
+        if (err?.code === 'ENOENT') {
+            console.error(`World info file ${filename} doesn't exist.`);
+            return dummyObject;
+        }
+        throw err;
+    }
+
+    return JSON.parse(worldInfoText);
+}
+
 export const router = express.Router();
 
 router.post('/list', async (request, response) => {
@@ -68,14 +99,18 @@ router.post('/list', async (request, response) => {
     }
 });
 
-router.post('/get', (request, response) => {
+router.post('/get', async (request, response) => {
     if (!request.body?.name) {
         return response.sendStatus(400);
     }
 
-    const file = readWorldInfoFile(request.user.directories, request.body.name, true);
-
-    return response.send(file);
+    try {
+        const file = await readWorldInfoFileAsync(request.user.directories, request.body.name, true);
+        return response.send(file);
+    } catch (err) {
+        console.error('Error reading World Info file:', err);
+        return response.sendStatus(500);
+    }
 });
 
 router.post('/delete', (request, response) => {
