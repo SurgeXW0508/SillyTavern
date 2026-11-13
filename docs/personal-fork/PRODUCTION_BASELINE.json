@@ -125,27 +125,12 @@
     {
       "item": "full_directory_backups",
       "status": "retained",
-      "owner": "user_after_restore_readiness_and_retention_review"
-    },
-    {
-      "item": "backrest_automatic_backup_and_restore_validation",
-      "status": "not_completed",
-      "owner": "user_in_a_separate_backup_task"
-    },
-    {
-      "item": "production_data_restore_drill",
-      "status": "not_performed",
-      "owner": "user_in_a_separate_restore_task"
+      "owner": "user_retention_at_discretion"
     },
     {
       "item": "remaining_formal_vertex_and_non_vertex_checks",
       "status": "not_verified",
       "owner": "maintainer_and_user_when_the_capability_is_needed_or_changed"
-    },
-    {
-      "item": "existing_private_request_filter_startup_warning",
-      "status": "not_separately_assessed",
-      "owner": "deployment_maintainer_in_a_separate_security_review"
     }
   ],
   "documentation_closeout": {
@@ -195,9 +180,8 @@
     "official_1_19_0_rollback_image": "retained"
   },
   "backup_readiness": {
-    "backrest_automatic_backup_and_restore_validation": "not_completed",
-    "production_data_restore_drill": "not_performed",
-    "verified_restore_point": null
+    "status": "not_tracked_as_pending",
+    "note": "Backrest is not actively configured and was removed from pending per user decision on 2026-11-13; full directory backups remain retained and runtime rollback stays separate from data restoration."
   },
   "nas_update_interface": {
     "compose": "fnos_managed_compose_project",
@@ -213,9 +197,9 @@
   },
   "security_observation": {
     "message": "listen is enabled but private request filter is disabled",
-    "source": "user_reported_existing_startup_warning",
-    "assessment": "not_separately_assessed",
-    "owner": "deployment_maintainer_in_a_separate_security_review"
+    "source": "user_confirmed_access_topology_2026-11-13",
+    "assessment": "closed_acceptable_lan_tailscale_self_use_no_public_exposure",
+    "assessed_at": "2026-11-13"
   },
   "release_branch_milestone": {
     "merged_at": "2026-11-12",

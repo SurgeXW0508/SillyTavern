@@ -118,22 +118,18 @@ python3 verify-stack.py --stack validated-stack.json --config nas-paths.json
 
 Runtime故障优先回到上一个已验证镜像，同时确认Tools/BaiBaoKu与该组合一致；插件有漂移时需恢复相应代码/配置，不能只回滚ST留下新Hook/Branch。数据恢复与Runtime回滚分开，不自动覆盖聊天数据。
 
-当前完整目录备份仍保留，Backrest自动备份和恢复验证尚未完成，真实生产数据恢复演练也未进行。因此只登记已有回滚资产，不宣称完整恢复能力已验证；数据正确性事故先停止写入、保留现场，再在独立任务中按已核实恢复点处理。本轮不进行恢复或清理。
+当前完整目录备份继续保留；Backrest自动备份暂未启用且按2026-11-13维护决定不再挂入常规Pending清单（后续如需建设自动备份再单独规划）。数据正确性事故仍遵循先停止写入、保留现场，与Runtime镜像回滚严格分离。
 
 ## 保留事项与后续责任
 
 | 现状 | 后续责任与范围 |
 | --- | --- |
-| Candidate镜像和临时目录尚未清理 | 用户在独立NAS清理任务中确认具体资产，不在本轮处理 |
+| Candidate镜像和临时目录尚未清理 | 用户在独立NAS清理任务中确认具体资产，不在开发分支处理 |
 | 官方1.19.0回滚镜像仍保留 | 用户在下一次Personal Release成功后按Current/Previous规则评估轮换 |
-| 完整目录备份仍保留 | 用户确认恢复保障和保留策略后另行决定；不把现有目录备份写成已验证恢复点 |
-| Backrest自动备份和恢复验证未完成 | 用户在独立备份任务中完善并留验收证据 |
-| 柏宝库 NAS Git 跟踪关系尚未整理 | 单独授权一次性将 NAS 插件从原作者 detached checkout 切换到个人 Fork 的 `personal/stable`；不影响当前运行版本 |
-| 真实生产数据恢复演练未进行 | 用户在独立恢复任务中验证，不在本轮操作真实数据 |
-| 部分Vertex及非Vertex能力未正式验收 | 对应能力变化或确有使用需要时，由维护者/用户补受影响组合验证，不追增本轮开发 |
-| 既有启动日志`listen is enabled but private request filter is disabled`尚未单独评估 | 部署维护者在独立安全审查中判断；本轮只记录，不推断原因/暴露范围或调整配置 |
+| 完整目录备份仍保留 | 由用户按需自行保留管理；镜像回滚不自动覆盖用户数据 |
+| 部分Vertex及非Vertex能力未正式验收 | 对应能力变化或确有使用需要时，由维护者/用户补受影响组合验证，不追增额外开发 |
 
-基本部署验收完成不等于备份/恢复、安全和所有可选能力已验收。飞牛Compose GUI更新流程已确认；Backrest自动备份与恢复验证、真实生产数据恢复演练和安全评估仍未完成。临时资产保持保留，Production Baseline的cleanup_allowed继续为false；本轮不授权删除任何文件、镜像或备份。
+补充结案说明（2026-11-13）：飞牛Compose GUI更新流程与柏宝库NAS Git跟踪关系（`personal/stable`）均已确认落地；启动日志`listen is enabled but private request filter is disabled`经确认NAS酒馆仅通过局域网/Tailscale单人自用、无公网暴露，属于容器端口映射的预期状态，不再列为安全待办；Backrest备份事项不再作为Pending跟踪。临时资产保持保留，Production Baseline的`cleanup_allowed`继续为`false`；未经明确授权不删除任何文件、镜像或备份。
 
 ## 当前仓库与发布状态
 

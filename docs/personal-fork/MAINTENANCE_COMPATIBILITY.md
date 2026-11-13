@@ -8,7 +8,7 @@ Canonical compatibility document。当前正式制品为[v1.19.0-personal.1](htt
 
 2026-11-12用户提供的NAS结果：`v1.19.0-personal.1`正式GHCR Digest仍在使用；容器`sillytavern`状态为`running`、RestartCount为0。Compose由飞牛 OS 管理，项目`sillytavern`，工作目录`/vol3/1000/SillyTavern`，配置文件`/vol3/1000/SillyTavern/docker-compose.yml`。NAS Tools仍为`personal/stable@2f6a9c54`、origin为个人Fork、tracking为`origin/personal/stable`、工作区clean。NAS BaiBaoKu 已于2026-11-12完成Git跟踪关系整理：当前分支`personal/stable`，跟踪`origin/personal/stable`，origin为个人Fork，upstream为原作者，工作区clean；NAS当前Git HEAD `4814830f`，Runtime基线仍为`b211a4e9`/0.7.3，另有`backup/pre-personal-stable-20261112`备份分支。后续Runbook文档提交使远端stable继续前进；更新前应fetch并按文档差异判断，不要将文档HEAD误认为Runtime变化。完整SHA、Digest和挂载路径以Production Baseline与Release Operations为准。
 
-正式镜像仅确认启动、Health、Vertex普通RP正文生成、刷新后聊天记录保留。Candidate的多轮、Stop、Regenerate等历史结果单独保留，不自动算作正式镜像已验证。清理、备份恢复、飞牛GUI方案和既有安全警告的后续责任见Operations待办；本轮不处理这些事项。
+正式镜像仅确认启动、Health、Vertex普通RP正文生成、刷新后聊天记录保留。Candidate的多轮、Stop、Regenerate等历史结果单独保留，不自动算作正式镜像已验证。飞牛GUI方案与仅局域网/Tailscale自用访问边界已确认结案，Backrest不再挂Pending，旧回滚镜像与临时目录保留边界见Operations。
 
 2026-11-12至2026-11-13阶段性仓库状态：Vertex协议契约、封闭枚举诊断、多媒体共享凭据域名守卫与流式/重放收尾（Runtime `e49a694083cc46dbf883f13eab664076c139011f`）及三仓库世界书性能优化、能力归属收敛、构建交付入口与扩展更新跟踪安全边界（ST `release`阶段Runtime `e92f8dc4dc2b6bed036567e9df6de3c376ffba6d`、柏宝箱`personal/stable@3314098e` / Runtime `61180ebd`、柏宝库`personal/stable@61aae569` / Runtime `9d9854ca`）已先后快进合入各自稳定分支；暂未修改`personal-release.json`、暂未构建新GHCR镜像或更新NAS，线上生产仍为`v1.19.0-personal.1`（ST Runtime `090cbba6d40e5d117ab41a9e6deb20b40e2dc336`、Tools `2f6a9c54`、BaiBaoKu `4814830f` / Runtime `b211a4e9`），待全部后续链路完成后统一发版与实机验证。
 
@@ -293,7 +293,7 @@ git -C /home/node/app/plugins/baibaoku pull --ff-only origin personal/stable
 
 部署时记录ST commit/不可变镜像digest、插件commit/跟踪分支和生产dist哈希、运行时、配置与数据备份位置。保留上一已验证组合及部署描述；回滚整套组合，不能只退ST而留下新的插件Hook。禁止以版本号标签代替运行代码证据。
 
-正式GHCR部署、实际Image ID、容器healthy/RestartCount=0及两插件SHA已由用户提供并登记。Backrest自动备份/恢复验证、真实生产数据恢复演练尚未完成；因此不宣称完整生产恢复能力已验证。Current/Previous与数据恢复分开，完整目录备份和官方过渡回滚镜像继续保留；不读取聊天正文或秘密。
+正式GHCR部署、实际Image ID、容器healthy/RestartCount=0及两插件SHA已由用户提供并登记。Backrest暂未启用且不列入常规Pending；Current/Previous镜像回滚与数据恢复严格分开，完整目录备份和官方过渡回滚镜像继续保留；不读取聊天正文或秘密。
 
 柏宝箱与柏宝库的个人`personal/stable`分支均放置简短AGENTS.md，链接本文及各自部署Runbook，不复制能力矩阵。所有涉及三仓库的任务必须显式要求先阅读本文；具体部署步骤分别见[柏宝箱维护与更新](https://github.com/SurgeXW0508/ST-BaiBai-Tools/blob/personal/stable/docs/PERSONAL_MAINTENANCE.md)和[柏宝库维护与更新](https://github.com/SurgeXW0508/baibaoku/blob/personal/stable/docs/PERSONAL_MAINTENANCE.md)。
 
