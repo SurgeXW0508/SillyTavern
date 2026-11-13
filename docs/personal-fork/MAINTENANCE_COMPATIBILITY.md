@@ -58,13 +58,19 @@ Decision Log、SH取舍索引及C-E0交接是对应阶段的历史证据。已�
 | 历史Prompt语义 | ST | — | 当前消息为语义来源，不能因旧response ID恢复已编辑/删除正文 |
 | 基础聊天保存 | ST | 柏宝恢复不采用 | 保持上游公共saveChat契约；不得删除已有数据 |
 | Save Generate / 后台任务 / 消息恢复 | 柏宝，但本组合不启用 | ST正常生成 | 整个Save Generate关闭；不保留Vertex内部调用契约 |
-| 自动重试/黑名单重试（Generate Retry） | Pending Ownership Review | 柏宝独立可选功能 | 与Save Generate不同；不从Save Generate不装配推断其开关或兼容性，不宣称其可安全接管Vertex |
-| 独立体验UI | 柏宝箱 | 未在本轮重新审查 | 不得获得Vertex生成生命周期所有权 |
-| 独立数据库/服务 | 柏宝库 | 未在本轮重新审查 | 当前Runtime仍与上游等价；个人Fork只隔离上游同步与生产分支，不代表启用Save Generate |
-| Fast Chat / Character Cache / Early Bridge | Pending Ownership Review | 多方 | R2/R3/R4后置，不提前选Owner |
-| Token Count失败结算 / Tokenizer资源初始化 | ST | 柏宝性能Bridge另行审查 | 本轮仅修Core生命周期；不引入缓存或批量Bridge |
+| 世界书编辑器渲染、切换与清理 | ST | 柏宝箱仅保留UI增强 | Core负责单次容器级清理、按需增量关键词缓存、`originalData`按`uid`索引、前端克隆对齐及`/api/worldinfo/get`异步读取；柏宝箱移除空Vue根挂载与逐条强制回流补高循环 |
+| 世界书 / 人设搜索 | ST | 柏宝箱搜索替换独立保留 | Core采用Shalistera `234cb02d` `Set`查找；柏宝箱编辑器搜索替换为独立UI能力 |
+| 世界书下拉分组/主题与全局选择器显示 | 柏宝箱 | — | 同次打开分组去重并复用未变书单；主题单次读取批量写入；全局选择器监听不响应`#world_editor_select` |
+| 自动重试/黑名单重试（Generate Retry） | 柏宝箱（可选，默认关闭） | — | 两个开关默认关闭且关闭时零解析直通；`chat_completion_source === 'vertexai'`一律直通，绝不接管Vertex生成生命周期 |
+| Tokenizer批量计数 | 柏宝箱计数 + 柏宝库桥接（ST拥有语义） | 持久化Token缓存不采用 | 面向OpenAI兼容渠道保留；桥接层不提前执行`substituteParams`，含宏条目回退ST原生计数；多模态数组/`tool_calls`对齐ST原生tiktoken语义 |
+| 扩展安装/更新线路 | 柏宝库（可选接管） | 关闭接管时走ST原生管理器 | 默认仅直连/代理权威来源可决定目标SHA（`allowUnverifiedMirrorDecision: false`），镜像仅作已知权威SHA下载通道；云端镜像兜底默认关闭（`cloudMirrorsEnabled: false`）；保留mihomo等代理自动探测；严禁自动切离`personal/*`或无上游跟踪分支；柏宝箱前端路由改写跟随后端接管开关 |
+| Fast Chat渐进加载 | ST原生 | 柏宝已移除/410 | 柏宝库后端返回`410 Gone`，柏宝箱删除残留前端fetch/trigger死代码与捕获监听 |
+| 主题懒加载 | 柏宝库剥离 + 柏宝箱水合 | — | 显式跨组件耦合；柏宝库检测不到已启用的柏宝箱或`power-user.js`主题桥时自动回退下发完整主题 |
+| 流式预览失败停止边界（`previewFailed`） | ST导出标志 + 柏宝箱尊重终态 | — | `StreamingProcessor`暴露`this.previewFailed`；柏宝箱`streamingRegexDefer`在`previewFailed`时不覆盖为全量重绘 |
+| 独立体验UI / 独立数据库服务 | 柏宝箱 / 柏宝库 | — | 不得获得Vertex生成生命周期所有权；备份列表fetch钩子按开关装配，重复`scrollTop`拦截合并为单一Owner |
+| Character Cache / Chat Search / Early Bridge合并层 | Pending Ownership Review | 多方 | 保持Pending另立议题；`fa16e070`持久化Chat token缓存与Markdown缓存明确Reject |
+| Token Count失败结算 / Tokenizer资源初始化 | ST | — | Core生命周期single-flight与失败结算由ST独立保证 |
 | Reasoning初始化 / 编辑与基础Chat导入 | ST | — | Handler单次装配；导入只创建新文件 |
-| Tokenizer性能、其他渲染/缓存优化 | Pending Ownership Review | 多方 | 不扩大Phase C；资源初始化正确性不等于性能能力归属 |
 
 ## Disabled Features
 
@@ -146,9 +152,9 @@ Evidence：详见[Phase C-D closeout](PHASE_CD_CLOSEOUT.md)中的命令、边界
 | --- | --- | --- | --- |
 | [510fbb54](https://github.com/Shalistera/SillyTavern/commit/510fbb545f3c713c869e86fff106b3d1a830ce63) | Vertex与诊断 | Adopted | Vertex由ST适配保留；诊断不引入 |
 | [01b87c88](https://github.com/Shalistera/SillyTavern/commit/01b87c88d08206ea056e622e955642c159f72f4c) | 消息/Reasoning深度与fade | Intentional Omission | 性能和渲染diff；不采用 |
-| [b34249a6](https://github.com/Shalistera/SillyTavern/commit/b34249a6c81e4cbffbb8cff6f45f32243c2ad2a1) | Markdown / WI / Chat Search | Pending Ownership Review | 搜索Owner未定；Markdown缓存不采用 |
+| [b34249a6](https://github.com/Shalistera/SillyTavern/commit/b34249a6c81e4cbffbb8cff6f45f32243c2ad2a1) | Markdown / WI / Chat Search | Pending Ownership Review（Chat Search）/ Reject（Markdown缓存） | Chat搜索Owner维持Pending；Markdown缓存明确Reject |
 | [b1ae6199](https://github.com/Shalistera/SillyTavern/commit/b1ae6199d44b9c0626552a7e00ac4d99ef618eea) | Chat summaries与Import | Adopt Now | 仅CAI转换和导入防覆盖；缓存/搜索待Owner |
-| [6360ee2c](https://github.com/Shalistera/SillyTavern/commit/6360ee2ce883411eb5bbe94a3be3c962ee846329) | stale search / Markdown / template | Pending Ownership Review | 不碰R2/搜索；其他缓存与去重优化不采用 |
+| [6360ee2c](https://github.com/Shalistera/SillyTavern/commit/6360ee2ce883411eb5bbe94a3be3c962ee846329) | stale search / Markdown / template | Pending Ownership Review（Search）/ Reject（Markdown缓存） | Chat搜索维持Pending；Markdown缓存明确Reject |
 | [097be538](https://github.com/Shalistera/SillyTavern/commit/097be5384c3a947b0d809b9d06845ff10a88578a) | Reasoning编辑/初始化 | Adopt Now | ST；不增加第二套Reasoning状态 |
 | [3ef63e86](https://github.com/Shalistera/SillyTavern/commit/3ef63e86c43a3c2637ec70fb972e09c0d93293c9) | 模型/性能文档与测试 | Intentional Omission | 非运行时依赖；使用个人验证文档 |
 | [78a22e87](https://github.com/Shalistera/SillyTavern/commit/78a22e873a0ebc81db9df68c33855e040f1bb559) | 跨API自定义模型ID | Intentional Omission | 可选功能；当前目标ID链路已有 |
@@ -161,7 +167,7 @@ Evidence：详见[Phase C-D closeout](PHASE_CD_CLOSEOUT.md)中的命令、边界
 | [f9404623](https://github.com/Shalistera/SillyTavern/commit/f940462387b9aafeb95d16ac2f1c3a3751f995de) | Media load listener清理 | Intentional Omission | 未发现当前数据损坏；媒体滚动生命周期优化暂不引入 |
 | [93eb4a29](https://github.com/Shalistera/SillyTavern/commit/93eb4a29889bec8bcf6823654bf01833c3ac98b8) | 性能与cache-miss基准 | Intentional Omission | 文档/benchmark，不是Core运行依赖 |
 | [bebe62bd](https://github.com/Shalistera/SillyTavern/commit/bebe62bdad8362f4b1c85e7c065ba48b58b3d2cc) | Span indexed语义 | Already Covered | 官方下标语义仍在；无需带入优化后修复 |
-| [234cb02d](https://github.com/Shalistera/SillyTavern/commit/234cb02d2538728fc96c0d64bbbfed2c50619c64) | WI / Persona search | Pending Ownership Review | 搜索优化与柏宝交叉，未选Owner |
+| [234cb02d](https://github.com/Shalistera/SillyTavern/commit/234cb02d2538728fc96c0d64bbbfed2c50619c64) | WI / Persona search | Adopt | ST；2026-11-13性能阶段采用`Set`查找（4行），与柏宝箱搜索替换独立不冲突 |
 | [cfc09c41](https://github.com/Shalistera/SillyTavern/commit/cfc09c41ba55a56e54e0888506313c715b848afc) | Folder索引 | Intentional Omission | 列表性能，无当前必要性 |
 | [a659d219](https://github.com/Shalistera/SillyTavern/commit/a659d219d81cc5084aa0d6d8c1e8d37c1b76cb49) | Group引用索引 / stat复用 | Intentional Omission | 列表性能，不引入索引状态 |
 | [c8147274](https://github.com/Shalistera/SillyTavern/commit/c8147274b34b281d204fa9887d9048b0431abfa6) | Webpack build cache | Intentional Omission | 构建优化非运行必要依赖 |
@@ -170,7 +176,7 @@ Evidence：详见[Phase C-D closeout](PHASE_CD_CLOSEOUT.md)中的命令、边界
 | [f84b0a1f](https://github.com/Shalistera/SillyTavern/commit/f84b0a1ffbc986b8e04f71d813a6c6fa835a1a0e) | Thumbnail header读取 | Intentional Omission | IO优化，不改图片路径 |
 | [b35c996c](https://github.com/Shalistera/SillyTavern/commit/b35c996c81cd878e277944bc10f1c367ee129083) | Hidden preview / 大数组替换 | Pending Ownership Review | 长聊天Owner后置；不引入throttle；极大历史参数上限未在当前环境复现/验收 |
 | [b0f25818](https://github.com/Shalistera/SillyTavern/commit/b0f25818429becd3518b943fd7d5399d3d452f63) | 并行Template初始化 | Intentional Omission | 启动性能，不改顺序 |
-| [fa16e070](https://github.com/Shalistera/SillyTavern/commit/fa16e070a67a57fc4e5be1cc8c5c0f374f3cedfa) | 持久化Chat token cache | Pending Ownership Review | Tokenizer性能Owner未定；本轮仅资源初始化 |
+| [fa16e070](https://github.com/Shalistera/SillyTavern/commit/fa16e070a67a57fc4e5be1cc8c5c0f374f3cedfa) | 持久化Chat token cache | Reject | 明确拒绝持久化Chat token缓存；OpenAI兼容批量计数由柏宝箱+柏宝库桥接承担 |
 | [b82c3547](https://github.com/Shalistera/SillyTavern/commit/b82c35477a9f2dbf9dcf07e46f88efae4accf045) | Tokenizer init生命周期 | Adopt Now | ST；single-flight、ready发布、失败可重试 |
 | [897eb6cb](https://github.com/Shalistera/SillyTavern/commit/897eb6cb4dd985feed8bb1b26534ba4530c9585d) | 浏览器/服务端性能文档 | Intentional Omission | 不引入性能benchmark体系 |
 | [63822f73](https://github.com/Shalistera/SillyTavern/commit/63822f73639d2945b0d1720df66effefb25282b0) | Streaming工具/失败/停止 | Adopt Now | 公共生命周期适配；已有Vertex收尾不再建立副本 |
@@ -242,9 +248,7 @@ Owner Review：本轮只改变维护记录和交接文档，没有能力实现�
 8. 验证候选是旧stable后代，再fast-forward推进`personal/stable`。不得force-push/rebase已公开的stable历史；rebase仅限尚未发布的候选，最终推广仍须保留旧stable祖先关系。
 9. 更新本canonical组合表、Owner/Disabled Features/Decision Log及结果记录；独立审查通过后，才进入另行授权的生产Update和全页重载。
 
-不可删除或改名柏宝箱或柏宝库的`personal/stable`。柏宝库可选扩展管理接管在跟踪分支消失或游离HEAD时可能选默认分支；维护任务必须核验origin、当前分支和跟踪关系。柏宝扩展管理接管仍为Pending Ownership Review，本轮没有修改开关；原生路由测试不等于已验证NAS的全部接管配置。
-
-柏宝箱自身版本提示有上游manifest兜底；提示不代表personal/stable已经有新提交。个人更新以ST扩展管理器的当前分支、commit及远端检查为准；本轮不改提示或更新实现。
+不可删除或改名柏宝箱或柏宝库的`personal/stable`。2026-11-13候选分支已收口扩展管理接管策略：柏宝库默认要求直连或代理等权威线路确认目标SHA（`allowUnverifiedMirrorDecision: false`、云端镜像兜底`cloudMirrorsEnabled: false`），并在当前分支为`personal/*`或缺少上游跟踪配置时一律禁止自动切向远端默认分支（含`force: true`）；柏宝箱前端仅在确认后端接管开启时才改写`/api/extensions/*`，且浏览器侧兜底更新检查改为读取个人Fork `SurgeXW0508/ST-BaiBai-Tools`的`personal/stable` manifest，不再读取上游`baibai-git/.../main`。日常个人更新仍以ST扩展管理器的当前分支、commit及远端检查为准。
 
 ## 柏宝库 Personal Fork 与固定生产分支策略
 
@@ -344,3 +348,27 @@ Capability Ownership Review & Security Boundary：
 - 防封号与安全边界：维持100%官方Vertex端点与标准头，每次用户操作仅单次上游派发（零自动重试）；聊天与多媒体共用单一官方Vertex域名白名单解析；错误诊断采用16 KiB / 5s双有界读取与封闭枚举白名单（`google.rpc.Code`、`ErrorInfo.reason`、协议层安全阻断枚举及受根约束的camelCase/snake_case Schema路径），绝不读取或回显上游`error.message`、`description`、URL、凭据或Prompt；结合`usageMetadata.thoughtsTokenCount`识别未开启思考展示时思考耗尽`maxOutputTokens`的场景；`#vertexai_runtime`等待秒表仅在等待阶段运行，进入接收或任意终态/异常/取消立即销毁，零残留定时器、零额外网络请求，并在终态展示隐式缓存命中率与Token分项明细。
 
 Scope & Deployment Status：已在`stage/vertex-protocol-and-ux`完成内部diff审查与外部安全/协议复核修复，全部检查通过（`lint`、`test:vertex` 40/40、`test:reliability` 17/17、`test:unit` 412/412、`release.node.mjs` 13/13、Python治理单测 4/4、真实Chromium E2E `VertexNative.e2e.js` + `CoreStreaming.e2e.js` 33/33、柏宝箱`test:personal-stable` 6/6、柏宝库5个Bridge锚点幂等核验 5/5），并基于`fdfad0703ad8bd08ba0d5cc90d0c6f15abecfc5d`快进合入个人`release`分支（阶段Runtime提交链：`fbdcfae4ef39e4bd624d81a01c35421d407e017e` → `206fc2476d76dadc2b24a6214d9dcea607265c8b` → `e49a694083cc46dbf883f13eab664076c139011f`）。按阶段规划，未修改`personal-release.json`（保持在已发布版本`v1.19.0-personal.1` / `090cbba6d40e5d117ab41a9e6deb20b40e2dc336`，避免提前触发`personal-release.yml`自动构建GHCR镜像；在此期间`scripts/personal/release.mjs check`会按设计提示相对`090cbba6`的Runtime差异，直至下一正式版本发版时同步更新`personal-release.json`）；已在`PRODUCTION_BASELINE.json`的`release_branch_milestone`与`repository_heads`登记仓库阶段基线，不改动`current_production`；未构建Docker镜像、未打Tag、未操作NAS生产环境，待后续性能优化与修复阶段完成后统一构建镜像并进行实机Google/NAS验收。
+
+## 2026-11-13 — 用户授权的三仓库性能优化与 Pending Ownership 收敛（Candidate 待审）
+
+Authorization & Scope：由用户明确授权在Vertex收尾后进入“三仓库性能优化（聚焦世界书`#world_editor_select`切换卡顿）+ Pending Ownership收敛 + 扩展镜像供应链边界加固”阶段。全程严守不触碰Vertex主链路、不恢复Save Generate、不引入新框架/新缓存层/新依赖的边界。
+
+Decision & Ownership Convergence：
+
+1. **世界书切换与搜索（ST Core Owner + Tools UI精简）**：
+   - ST Core（`stage/perf-worldinfo`）：消除切换世界书时的重复DOM清理并改为容器级释放（`clearEntriesListDom`）；将每次切换全量`O(K²)`关键词候选重建改为按需`Set`构建与增量追加；为`originalData.entries`建立基于`WeakMap`的`uid`索引并在新增/删除/克隆时同步维护；对齐前端`worldInfoCache`未命中时的深拷贝语义；将后端`/api/worldinfo/get`改为异步文件读取；采用Shalistera `234cb02d`的世界书/人设搜索`Set`查找；在`StreamingProcessor`上暴露`this.previewFailed`供前端流式扩展判断预览失败终态。
+   - 柏宝箱（`candidate/perf-worldinfo`）：删除`worldInfoListOptimizer`只为附加ST节点而每次create/mount的空Vue根应用，移除逐条同步读取`offsetHeight`的强制回流补高循环；世界书下拉分组对同次打开事件去重并在书单未变时复用分组结构；下拉主题同步改为单次`getComputedStyle`读取与批量`cssText`写入；全局世界书选择器捕获监听排除`#world_editor_select`；`mobileLayout`仅在移动布局安装观察器，`entryVisibility`全部测量完成后立即断开`IntersectionObserver`。
+2. **Tokenizer批量桥与宏求值正确性（Tools + BaiBaoKu 桥接，ST 拥有语义）**：
+   - 保留OpenAI兼容渠道所需的Tokenizer批量桥，明确拒绝`fa16e070`持久化Chat token缓存与Markdown缓存。
+   - 修复柏宝库`openai-tokenizer-bridge-installer.js`与`world-info-tokenizer-bridge-installer.js`提前调用`substituteParams`导致有状态宏（如`{{roll}}`、`{{random}}`）重复或提前求值的问题，并将注入范围完全收进`start/end`标记块内，支持字节级精确`unpatch`还原；含宏文本跳过预热/批量计数并交回ST原生单次求值计数；修复多模态数组/`tool_calls`在批量计数中被误强转为`"[object Object]"`的偏差，严格对齐ST原生tiktoken语义；世界书编辑器Tokenizer预热仅在`main_api === 'openai'`时运行。
+3. **扩展管理供应链版本决定权与分支保护（BaiBaoKu 可选接管 + Tools 跟随开关）**：
+   - 供应链安全决定（不过度防御）：服务器端会执行的扩展与自更新代码默认必须由**权威线路**（直连GitHub或经用户代理连接GitHub）决定目标提交SHA（`allowUnverifiedMirrorDecision: false`），并在探测阶段保证更快的镜像响应不会提前中止在途的权威代理探测；第三方镜像仍可作为已知权威SHA的下载通道（由git校验对象哈希且克隆后二次核对HEAD SHA）；云端镜像列表兜底默认关闭（`cloudMirrorsEnabled: false`）；完整保留mihomo场景所需的代理探测（环境变量、ST `requestProxy`、git `http.proxy`、本机端口`7890/7897/10809/1080`）。若用户处于纯镜像无代理环境，可通过配置显式开启`allowUnverifiedMirrorDecision: true`。
+   - 分支保护：本地位于`personal/*`受保护分支或缺少上游跟踪配置（`!trackedBranch`）时，即使传入`force: true`也严禁自动切换到远端默认分支（如`main`），防止误拉取带Save Generate的上游主线。
+   - 柏宝箱前端`/api/extensions/*`改写前先查询后端接管配置，未开启时直通ST原生路由；浏览器兜底更新检查改为读取个人Fork `SurgeXW0508/ST-BaiBai-Tools`的`personal/stable` manifest。
+4. **常驻钩子收敛与跨组件耦合兜底**：
+   - 柏宝箱删除后端已`410 Gone`的Fast Chat渐进加载残留fetch/trigger死代码与捕获监听；备份列表fetch拦截按对应开关装配；合并两处重复的`Element.prototype.scrollTop`定义为单一Owner；`streamingRegexDefer`在`processor.previewFailed === true`时跳过收尾全量重绘。
+   - 柏宝库修复切换/列出世界书（只读`/api/worldinfo/get`、`/api/worldinfo/list`）误清空前端`settingsGetCache`的缺陷；新增`hasActiveLazyThemeHydrator`守卫，在未检测到已启用的柏宝箱或`power-user.js`主题桥时自动回退下发完整主题数据。
+   - Character Cache、Chat Search与Early Bridge `MutationObserver`合并层维持`Pending Ownership Review`，本阶段不触碰。
+
+Candidate Status：三仓库改动均提交在各自本地候选分支（ST `stage/perf-worldinfo`、Tools `candidate/perf-worldinfo`已同步构建`dist/index.js`、BaiBaoKu `candidate/perf-worldinfo`），尚未合入`release`或`personal/stable`，未修改`personal-release.json`或`PRODUCTION_BASELINE.json`的`current_production`，未推送、未构建Docker镜像、未操作NAS，待用户审查diff并明确授权后按发布节奏推进。
+
