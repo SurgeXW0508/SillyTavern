@@ -329,7 +329,7 @@ Decision：三个仓库统一采用“上游同步镜像 → 独立审查 → �
 - 柏宝库：个人Fork的`main`只同步原作者，`personal/stable`是唯一生产分支。NAS已完成一次性整理，`origin`指向个人Fork、`upstream`指向原作者，当前跟踪`origin/personal/stable`。日常更新使用飞牛Docker容器终端中的定向Git更新，然后通过GUI重启容器；不使用会更新全部Server Plugins的全局脚本。
 - 三仓库的详细安装、更新、依赖、重启、回滚步骤分别见[Release Operations](PERSONAL_RELEASE_OPERATIONS.md)、[柏宝箱 Runbook](https://github.com/SurgeXW0508/ST-BaiBai-Tools/blob/personal/stable/docs/PERSONAL_MAINTENANCE.md)和[柏宝库 Runbook](https://github.com/SurgeXW0508/baibaoku/blob/personal/stable/docs/PERSONAL_MAINTENANCE.md)。
 
-交接规则：凡Runtime修改完成实现、测试和审查后，必须说明变更是否已进入生产分支/Release、NAS当前与目标commit或Digest，并主动询问用户是否现在更新NAS。文档/测试-only变更明确说明无需更新Runtime。不得自动发布、切换Digest、更新插件、重启容器或修改生产数据；部署必须得到用户明确授权。
+交接规则：仅在**大阶段或完整大功能节点收口**（已具备评估部署价值，或用户主动询问发布/部署）时提供NAS部署交接，说明变更是否影响NAS Runtime、是否已进入生产分支/Release、NAS当前与目标commit或Digest，并询问用户是否现在更新NAS；中间讨论、小功能子步骤、候选修复迭代或用户已明确延后统一发版的阶段内不重复附带NAS更新提示。任何情况下不得自动发布、切换Digest、更新插件、重启容器或修改生产数据；部署必须得到用户明确授权。
 
 Scope（初始文档收口）：只修改文档并在个人Fork创建柏宝库`personal/stable`分支；未修改Runtime源码、未运行构建或发布。\n\nFollow-up（2026-11-12）：用户提供NAS执行结果，确认柏宝库已成功切换到个人Fork的`personal/stable`，并设置`origin`为个人仓库、`upstream`为原作者；工作区clean，保留原始Runtime备份分支。本次Git跟踪整理不改变Runtime，不需要重启。随后将当前NAS分支、备份分支和远端关系同步记录到Production Baseline与柏宝库Runbook。
 
