@@ -60,12 +60,12 @@ Decision Log、SH取舍索引及C-E0交接是对应阶段的历史证据。已�
 | Save Generate / 后台任务 / 消息恢复 | 柏宝，但本组合不启用 | ST正常生成 | 整个Save Generate关闭；不保留Vertex内部调用契约 |
 | 世界书编辑器渲染、切换与清理 | ST | 柏宝箱仅保留UI增强 | Core负责单次容器级清理、按需增量关键词缓存、`originalData`按`uid`索引、前端克隆对齐及`/api/worldinfo/get`异步读取；柏宝箱移除空Vue根挂载与逐条强制回流补高循环 |
 | 世界书 / 人设搜索 | ST | 柏宝箱搜索替换独立保留 | Core采用Shalistera `234cb02d` `Set`查找；柏宝箱编辑器搜索替换为独立UI能力 |
-| 世界书下拉分组/主题与全局选择器显示 | 柏宝箱 | — | 同次打开分组去重并复用未变书单；主题单次读取批量写入；全局选择器监听不响应`#world_editor_select` |
+| 世界书下拉分组/主题与全局选择器显示 | 柏宝箱 | — | 同次打开分组去重并复用未变书单；主题单次读取批量写入且签名覆盖全部29项样式；全局选择器对`#world_editor_select`的`change`仅按帧合并刷新标签显示，不重建下拉或重排选项 |
 | 自动重试/黑名单重试（Generate Retry） | 柏宝箱（可选，默认关闭） | — | 两个开关默认关闭且关闭时零解析直通；`chat_completion_source === 'vertexai'`一律直通，绝不接管Vertex生成生命周期 |
 | Tokenizer批量计数 | 柏宝箱计数 + 柏宝库桥接（ST拥有语义） | 持久化Token缓存不采用 | 面向OpenAI兼容渠道保留；桥接层不提前执行`substituteParams`，含宏条目回退ST原生计数；多模态数组/`tool_calls`对齐ST原生tiktoken语义 |
-| 扩展安装/更新线路 | 柏宝库（可选接管） | 关闭接管时走ST原生管理器 | 默认仅直连/代理权威来源可决定目标SHA（`allowUnverifiedMirrorDecision: false`），镜像仅作已知权威SHA下载通道；云端镜像兜底默认关闭（`cloudMirrorsEnabled: false`）；保留mihomo等代理自动探测；严禁自动切离`personal/*`或无上游跟踪分支；柏宝箱前端路由改写跟随后端接管开关 |
+| 扩展安装/更新线路 | 柏宝库（可选接管） | 关闭接管时走ST原生管理器 | 默认仅直连/代理权威来源可决定目标SHA（`allowUnverifiedMirrorDecision: false`），镜像仅作已知权威SHA下载通道；云端镜像兜底默认关闭（`cloudMirrorsEnabled: false`）；保留mihomo等代理自动探测；严禁自动切向远端默认分支，`personal/*`须显式配置upstream，非`personal/*`缺merge配置时仅在权威线路确认远端存在同名分支才允许更新并补写跟踪配置；柏宝箱前端路由改写跟随后端接管开关 |
 | Fast Chat渐进加载 | ST原生 | 柏宝已移除/410 | 柏宝库后端返回`410 Gone`，柏宝箱删除残留前端fetch/trigger死代码与捕获监听 |
-| 主题懒加载 | 柏宝库剥离 + 柏宝箱水合 | — | 显式跨组件耦合；柏宝库检测不到已启用的柏宝箱或`power-user.js`主题桥时自动回退下发完整主题 |
+| 主题懒加载 | 柏宝库剥离 + 柏宝箱水合 | — | 显式跨组件耦合；柏宝库进程内记录主题桥状态并以30s TTL缓存扩展目录扫描，检测不到已启用的柏宝箱或`power-user.js`主题桥时自动回退下发完整主题 |
 | 流式预览失败停止边界（`previewFailed`） | ST导出标志 + 柏宝箱尊重终态 | — | `StreamingProcessor`暴露`this.previewFailed`；柏宝箱`streamingRegexDefer`在`previewFailed`时不覆盖为全量重绘 |
 | 独立体验UI / 独立数据库服务 | 柏宝箱 / 柏宝库 | — | 不得获得Vertex生成生命周期所有权；备份列表fetch钩子按开关装配，重复`scrollTop`拦截合并为单一Owner |
 | Character Cache / Chat Search / Early Bridge合并层 | Pending Ownership Review | 多方 | 保持Pending另立议题；`fa16e070`持久化Chat token缓存与Markdown缓存明确Reject |
@@ -248,7 +248,7 @@ Owner Review：本轮只改变维护记录和交接文档，没有能力实现�
 8. 验证候选是旧stable后代，再fast-forward推进`personal/stable`。不得force-push/rebase已公开的stable历史；rebase仅限尚未发布的候选，最终推广仍须保留旧stable祖先关系。
 9. 更新本canonical组合表、Owner/Disabled Features/Decision Log及结果记录；独立审查通过后，才进入另行授权的生产Update和全页重载。
 
-不可删除或改名柏宝箱或柏宝库的`personal/stable`。2026-11-13候选分支已收口扩展管理接管策略：柏宝库默认要求直连或代理等权威线路确认目标SHA（`allowUnverifiedMirrorDecision: false`、云端镜像兜底`cloudMirrorsEnabled: false`），并在当前分支为`personal/*`或缺少上游跟踪配置时一律禁止自动切向远端默认分支（含`force: true`）；柏宝箱前端仅在确认后端接管开启时才改写`/api/extensions/*`，且浏览器侧兜底更新检查改为读取个人Fork `SurgeXW0508/ST-BaiBai-Tools`的`personal/stable` manifest，不再读取上游`baibai-git/.../main`。日常个人更新仍以ST扩展管理器的当前分支、commit及远端检查为准。
+不可删除或改名柏宝箱或柏宝库的`personal/stable`。2026-11-13候选分支已收口扩展管理接管策略：柏宝库默认要求直连或代理等权威线路确认目标SHA（`allowUnverifiedMirrorDecision: false`、云端镜像兜底`cloudMirrorsEnabled: false`），并采用`NO_UPSTREAM`方案A——`personal/*`分支必须配置显式upstream，非`personal/*`分支缺失`branch.<name>.merge`时仅在权威线路确认远端存在`origin/<同名分支>`时才按同名分支更新并自动补写跟踪配置，游离`HEAD`或远端无同名分支一律报`NO_UPSTREAM`，任何情况下（含`force: true`）严禁自动切向远端默认分支；柏宝箱前端仅在确认后端接管开启时才改写`/api/extensions/*`（非`unsupported`临时读取失败设60s冷却期），且浏览器侧兜底更新检查改为读取个人Fork `SurgeXW0508/ST-BaiBai-Tools`的`personal/stable` manifest，不再读取上游`baibai-git/.../main`。日常个人更新仍以ST扩展管理器的当前分支、commit及远端检查为准。
 
 ## 柏宝库 Personal Fork 与固定生产分支策略
 
@@ -356,19 +356,31 @@ Authorization & Scope：由用户明确授权在Vertex收尾后进入“三仓�
 Decision & Ownership Convergence：
 
 1. **世界书切换与搜索（ST Core Owner + Tools UI精简）**：
-   - ST Core（`stage/perf-worldinfo`）：消除切换世界书时的重复DOM清理并改为容器级释放（`clearEntriesListDom`）；将每次切换全量`O(K²)`关键词候选重建改为按需`Set`构建与增量追加；为`originalData.entries`建立基于`WeakMap`的`uid`索引并在新增/删除/克隆时同步维护；对齐前端`worldInfoCache`未命中时的深拷贝语义；将后端`/api/worldinfo/get`改为异步文件读取；采用Shalistera `234cb02d`的世界书/人设搜索`Set`查找；在`StreamingProcessor`上暴露`this.previewFailed`供前端流式扩展判断预览失败终态。
-   - 柏宝箱（`candidate/perf-worldinfo`）：删除`worldInfoListOptimizer`只为附加ST节点而每次create/mount的空Vue根应用，移除逐条同步读取`offsetHeight`的强制回流补高循环；世界书下拉分组对同次打开事件去重并在书单未变时复用分组结构；下拉主题同步改为单次`getComputedStyle`读取与批量`cssText`写入；全局世界书选择器捕获监听排除`#world_editor_select`；`mobileLayout`仅在移动布局安装观察器，`entryVisibility`全部测量完成后立即断开`IntersectionObserver`。
+   - ST Core（`stage/perf-worldinfo`）：消除切换世界书时的重复DOM清理并改为单次Select2销毁后容器级释放（`clearEntryList`）；将每次切换全量`O(K²)`关键词候选重建改为`Map`增量计数与按需懒排序（同时修复切至无关键词世界书时残留旧缓存的问题）；为`originalData.entries`建立基于`WeakMap`的`uid -> 下标`索引（`S1`，命中校验`entries[idx]?.uid === uid`，原地替换中间元素或修改`uid`时自动重建一次，新增/删除/克隆同步维护）；对齐前端`loadWorldInfo`缓存未命中时的深拷贝语义；将后端`/api/worldinfo/get`改为异步文件读取并标注同步/异步读取函数语义同步约束（`S2`）；采用Shalistera `234cb02d`的世界书/人设搜索`Set`查找；在`StreamingProcessor`上暴露`this.previewFailed`供前端流式扩展判断预览失败终态。
+   - 柏宝箱（`candidate/perf-worldinfo`）：删除`vueList.js`（历史命名，已无Vue依赖，`T6`）只为附加ST节点而每次create/mount的空Vue根应用，并在节点插入后经`requestAnimationFrame`让出一帧再执行搜索面板/布局收尾刷新，让出前后双重校验`renderToken`与启用开关（`T1`）；世界书下拉分组对同次打开事件去重并在书单未变时复用分组结构；下拉主题同步改为单次`getComputedStyle`读取与批量样式写入，且主题签名覆盖全部29项快照字段（`T3`）；全局世界书选择器对`#world_editor_select`的`change`仅在`requestAnimationFrame`中按帧合并刷新已登记选择器显示标签，不重建下拉或重排选项（`T2`）；`mobileLayout`仅在移动布局安装观察器，`entryVisibility`完成一次卡片高度采样后同时断开`ResizeObserver`与`MutationObserver`。
 2. **Tokenizer批量桥与宏求值正确性（Tools + BaiBaoKu 桥接，ST 拥有语义）**：
    - 保留OpenAI兼容渠道所需的Tokenizer批量桥，明确拒绝`fa16e070`持久化Chat token缓存与Markdown缓存。
    - 修复柏宝库`openai-tokenizer-bridge-installer.js`与`world-info-tokenizer-bridge-installer.js`提前调用`substituteParams`导致有状态宏（如`{{roll}}`、`{{random}}`）重复或提前求值的问题，并将注入范围完全收进`start/end`标记块内，支持字节级精确`unpatch`还原；含宏文本跳过预热/批量计数并交回ST原生单次求值计数；修复多模态数组/`tool_calls`在批量计数中被误强转为`"[object Object]"`的偏差，严格对齐ST原生tiktoken语义；世界书编辑器Tokenizer预热仅在`main_api === 'openai'`时运行。
 3. **扩展管理供应链版本决定权与分支保护（BaiBaoKu 可选接管 + Tools 跟随开关）**：
    - 供应链安全决定（不过度防御）：服务器端会执行的扩展与自更新代码默认必须由**权威线路**（直连GitHub或经用户代理连接GitHub）决定目标提交SHA（`allowUnverifiedMirrorDecision: false`），并在探测阶段保证更快的镜像响应不会提前中止在途的权威代理探测；第三方镜像仍可作为已知权威SHA的下载通道（由git校验对象哈希且克隆后二次核对HEAD SHA）；云端镜像列表兜底默认关闭（`cloudMirrorsEnabled: false`）；完整保留mihomo场景所需的代理探测（环境变量、ST `requestProxy`、git `http.proxy`、本机端口`7890/7897/10809/1080`）。若用户处于纯镜像无代理环境，可通过配置显式开启`allowUnverifiedMirrorDecision: true`。
-   - 分支保护：本地位于`personal/*`受保护分支或缺少上游跟踪配置（`!trackedBranch`）时，即使传入`force: true`也严禁自动切换到远端默认分支（如`main`），防止误拉取带Save Generate的上游主线。
-   - 柏宝箱前端`/api/extensions/*`改写前先查询后端接管配置，未开启时直通ST原生路由；浏览器兜底更新检查改为读取个人Fork `SurgeXW0508/ST-BaiBai-Tools`的`personal/stable` manifest。
+   - 分支保护与同名分支推断（`NO_UPSTREAM` 方案 A，`K2` + `K4`）：`personal/*`受保护分支必须具备显式上游跟踪配置，游离`HEAD`或`personal/*`缺失upstream时一律报`NO_UPSTREAM` / `BRANCH_PROTECTED`拦截；非`personal/*`的合法本地分支若缺失`branch.<name>.merge`，仅在**权威线路**确认远端存在`origin/<同名分支>`时才按同名分支检查或更新，并在更新成功后于`system`与`builtin`双后端自动补写`branch.<name>.remote/merge`与`remote.origin.fetch`；远端无同名分支时仍报`NO_UPSTREAM`，任何情况下（含`force: true`）严禁自动切换到远端默认分支（如`main`）。错误提示统一使用相对扩展路径（`extensions/<folder>`或`public/scripts/extensions/third-party/<folder>`），不暴露服务端绝对路径。
+   - 柏宝箱前端`/api/extensions/*`改写前先查询后端接管配置，未开启时直通ST原生路由，非`unsupported`临时查询错误进入60s冷却期并沿用本地缓存值（`T5`）；浏览器兜底更新检查改为读取个人Fork `SurgeXW0508/ST-BaiBai-Tools`的`personal/stable` manifest。
 4. **常驻钩子收敛与跨组件耦合兜底**：
-   - 柏宝箱删除后端已`410 Gone`的Fast Chat渐进加载残留fetch/trigger死代码与捕获监听；备份列表fetch拦截按对应开关装配；合并两处重复的`Element.prototype.scrollTop`定义为单一Owner；`streamingRegexDefer`在`processor.previewFailed === true`时跳过收尾全量重绘。
-   - 柏宝库修复切换/列出世界书（只读`/api/worldinfo/get`、`/api/worldinfo/list`）误清空前端`settingsGetCache`的缺陷；新增`hasActiveLazyThemeHydrator`守卫，在未检测到已启用的柏宝箱或`power-user.js`主题桥时自动回退下发完整主题数据。
+   - 柏宝箱删除后端已`410 Gone`的Fast Chat渐进加载残留fetch/trigger死代码、无用常量与重复空调用（`T6`）；生成重试导出并复用单一`GENERATION_REQUEST_ID_KEY`常量且Vertex请求一律直通（`T4`）；备份列表fetch拦截按对应开关装配；合并两处重复的`Element.prototype.scrollTop`定义为单一Owner，且无`requestAnimationFrame`环境不吞掉写入（`T7`）；`streamingRegexDefer`在`processor.previewFailed === true`时跳过收尾全量重绘。
+   - 柏宝库抽取单一`SETTINGS_CACHE_READONLY_PATHS` / `SETTINGS_CACHE_INVALIDATE_PREFIXES`常量并经`JSON.stringify`同步注入`early-bridge`内联脚本（`K3`），修复切换/列出世界书（只读`/api/worldinfo/get`、`/api/worldinfo/list`）误清空前端`settingsGetCache`的缺陷；`hasActiveLazyThemeHydrator`改为进程内读取`getThemeBridgeStatus()`并按目录做30s TTL扫描缓存、实时解析禁用列表（`K1`），未检测到已启用的柏宝箱或`power-user.js`主题桥时自动回退下发完整主题数据。
    - Character Cache、Chat Search与Early Bridge `MutationObserver`合并层维持`Pending Ownership Review`，本阶段不触碰。
 
-Candidate Status：三仓库改动均提交在各自本地候选分支（ST `stage/perf-worldinfo`、Tools `candidate/perf-worldinfo`已同步构建`dist/index.js`、BaiBaoKu `candidate/perf-worldinfo`），尚未合入`release`或`personal/stable`，未修改`personal-release.json`或`PRODUCTION_BASELINE.json`的`current_production`，未推送、未构建Docker镜像、未操作NAS，待用户审查diff并明确授权后按发布节奏推进。
+Evidence（隔离Chromium基准`n=5`，CPU 2x节流，预热后`50↔300↔1000`条目4组切换正逆序交替5轮，仅作隔离回归对比，不等同NAS/手机实机验收）：
+
+- 默认`perPage=25`（全部12组场景中位数与p90全面下降）：
+  - `st-only`：`switchInteractiveMs`中位数`506–565ms → 449–509ms`（`-5.9% ~ -16.2%`，p90 `522–632ms → 469–538ms`），`longTaskMaxMs`中位数`279–339ms → 218–284ms`（`-13.1% ~ -21.9%`），`longTaskTotalMs`中位数`366–442ms → 315–376ms`。
+  - `st+tools`：`dropdownOpenMs`中位数`289–342ms → 276–288ms`，`switchInteractiveMs`中位数`548–595ms → 464–525ms`（`-9.3% ~ -16.5%`，p90 `597–631ms → 512–537ms`），`longTaskTotalMs`中位数`430–451ms → 343–393ms`（`-12.9% ~ -21.9%`，长任务数`3 → 2`）。
+  - `st+tools+baibaoku`：`dropdownOpenMs`中位数`314–374ms → 295–304ms`，`switchInteractiveMs`中位数`519–547ms → 480–519ms`（`-2.8% ~ -10.3%`，p90 `552–637ms → 483–536ms`），`longTaskTotalMs`中位数`402–428ms → 312–369ms`（`-13.0% ~ -25.2%`，长任务数`3 → 2`）。
+- 大页`perPage=100`：
+  - `st-only`：`switchInteractiveMs`中位数`905–1290ms → 701–1222ms`（`-4.2% ~ -22.5%`），`longTaskMaxMs`中位数`591–809ms → 419–757ms`（`-5.6% ~ -29.1%`）。
+  - `st+tools`：`switchInteractiveMs`中位数`873–1218ms → 749–1178ms`（`-0.8% ~ -14.2%`），`longTaskTotalMs`中位数`693–924ms → 644–921ms`（`-0.3% ~ -7.1%`）；移除空Vue挂载后离线构建与DOM插入合并至同一任务（长任务数`3 → 2`，单次`longTaskMaxMs`中位数`419–621ms → 465–753ms`，与`st-only`的`419–757ms`对齐），插入后收尾刷新已按`T1`让出一帧。
+  - `st+tools+baibaoku`：`1000→50`与`50→300`的`switchInteractiveMs`中位数分别为`911→756ms`（`-17.0%`）与`999→1007ms`（`+0.8%`），`50→1000`与`300→1000`因单次插入4207个节点叠加尚未收敛的`early-bridge`全局`MutationObserver`扫描，中位数分别为`1022→1098ms`（`+7.4%`）与`1023→1188ms`（`+16.1%`）、`longTaskMaxMs`中位数`424–458ms → 450–713ms`；按边界不新增分批机制、不提前触碰Pending的`early-bridge`观察器。
+
+Candidate Status：三仓库代码修复、审查收尾（`S1–S2`、`T1–T7`、`K1–K4`）、测试与文档均提交在各自本地候选分支（ST `stage/perf-worldinfo`、Tools `candidate/perf-worldinfo`已同步构建`dist/index.js`、BaiBaoKu `candidate/perf-worldinfo`），尚未合入`release`或`personal/stable`，未修改`personal-release.json`或`PRODUCTION_BASELINE.json`的`current_production`，未推送、未构建Docker镜像、未操作NAS，待用户确认后按授权推进合并与部署。
+
 
