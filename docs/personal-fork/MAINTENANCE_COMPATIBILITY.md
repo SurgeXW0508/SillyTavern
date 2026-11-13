@@ -68,6 +68,7 @@ Decision Log、SH取舍索引及C-E0交接是对应阶段的历史证据。已�
 | 主题懒加载 | 柏宝库剥离 + 柏宝箱水合 | — | 显式跨组件耦合；柏宝库进程内记录主题桥状态并以30s TTL缓存扩展目录扫描，检测不到已启用的柏宝箱或`power-user.js`主题桥时自动回退下发完整主题 |
 | 流式预览失败停止边界（`previewFailed`） | ST导出标志 + 柏宝箱尊重终态 | — | `StreamingProcessor`暴露`this.previewFailed`；柏宝箱`streamingRegexDefer`在`previewFailed`时不覆盖为全量重绘 |
 | 独立体验UI / 独立数据库服务 | 柏宝箱 / 柏宝库 | — | 不得获得Vertex生成生命周期所有权；备份列表fetch钩子按开关装配，重复`scrollTop`拦截合并为单一Owner |
+| 楼层管理器 / AI 标注改写（柏宝砚） | 柏宝箱 | 单独安装同名扩展时内置自动让出 | 仅经ST公共`saveChat`与`MESSAGE_EDITED`/`MESSAGE_UPDATED`写聊天（按上游设计绕过`runOnEdit`正则，并发校验`chatId`与`expectedText`，失败回滚）；生成仅走ST后端chat-completions副渠道或`generateRaw` quiet模式，绝不接管Vertex生成生命周期、重试或Save Generate；世界书仅经`checkWorldInfo(..., isDryRun=true)`只读读取；Feature Off：`newFloorManagerEnabled=false` → `stopPen()`断开`#chat`观察器、卸载Vue并移除`#bby-app-host` |
 | Character Cache / Chat Search / Early Bridge合并层 | Pending Ownership Review | 多方 | 保持Pending另立议题；`fa16e070`持久化Chat token缓存与Markdown缓存明确Reject |
 | Token Count失败结算 / Tokenizer资源初始化 | ST | — | Core生命周期single-flight与失败结算由ST独立保证 |
 | Reasoning初始化 / 编辑与基础Chat导入 | ST | — | Handler单次装配；导入只创建新文件 |
@@ -81,9 +82,9 @@ Decision Log、SH取舍索引及C-E0交接是对应阶段的历史证据。已�
 | Component | Source / branch | 精确验证基线 |
 | --- | --- | --- |
 | Personal ST运行代码 | `SurgeXW0508/SillyTavern:release` | NAS正式生产仍为`090cbba6d40e5d117ab41a9e6deb20b40e2dc336`（`v1.19.0-personal.1`）；仓库`release`已阶段性合入Vertex收尾（`e49a6940`）与三仓库性能/归属收敛（最新阶段Runtime `e92f8dc4dc2b6bed036567e9df6de3c376ffba6d`，暂未构建新GHCR镜像） |
-| 柏宝箱上游同步基线 | `baibai-git/ST-BaiBai-Tools:main` → `SurgeXW0508/ST-BaiBai-Tools:main` | `1e87dfaad87819a90d8032530a62a2ed29f97aea`，实际package/manifest版本1.1.5 |
-| 柏宝箱唯一个人部署分支 | `SurgeXW0508/ST-BaiBai-Tools:personal/stable` | NAS当前仍为`2f6a9c54d2c906b4a0e44d20c12d0712552e393d`（跟踪`origin/personal/stable`）；仓库`personal/stable`已阶段性快进合入至`3314098e1f009c253ed399b84b05876791472484`（Runtime/`dist`提交`61180ebd1e7844b2c9a2e9962520608b3b3bf1b2`），待统一发版后在NAS更新 |
-| 柏宝库唯一个人部署分支 | `SurgeXW0508/baibaoku:personal/stable` | NAS当前Git HEAD仍为`4814830f2d161dfff89e75370effa31d669586d9`（Runtime基线`b211a4e97fdaec24dc8b90c85ddc198fac9ac200` / 0.7.3，跟踪`origin/personal/stable`，原作者为`upstream`）；仓库`personal/stable`已阶段性快进合入至`61aae5691cc3488310c3834c20699d910e5fc639`（Runtime提交`9d9854ca244d21c50231936ffbab9ab48a6fba2b`），待统一发版后在NAS更新 |
+| 柏宝箱上游同步基线 | `baibai-git/ST-BaiBai-Tools:main` → `SurgeXW0508/ST-BaiBai-Tools:main` | 镜像`main`已快进同步至`d828d6812994414cef24be9e5f995a264e9fe370`（`1.2.0`，此前已合入`personal/stable`的上游基线为`1e87dfaad87819a90d8032530a62a2ed29f97aea` / `1.1.5`） |
+| 柏宝箱唯一个人部署分支 | `SurgeXW0508/ST-BaiBai-Tools:personal/stable` | NAS当前仍为`2f6a9c54d2c906b4a0e44d20c12d0712552e393d`（跟踪`origin/personal/stable`）；仓库`personal/stable`当前为`3314098e1f009c253ed399b84b05876791472484`（Runtime/`dist`提交`61180ebd1e7844b2c9a2e9962520608b3b3bf1b2`），`1.2.0`同步已完成`candidate/baibai-1.2.0`审查验证待授权快进合入 |
+| 柏宝库唯一个人部署分支 | `SurgeXW0508/baibaoku:personal/stable` | NAS当前Git HEAD仍为`4814830f2d161dfff89e75370effa31d669586d9`（Runtime基线`b211a4e97fdaec24dc8b90c85ddc198fac9ac200` / 0.7.3，跟踪`origin/personal/stable`，原作者为`upstream`）；镜像`main`已快进同步至`d915bc8f0036fb308f02b9a9e52ae880f05d4fe4`（`0.7.4`），仓库`personal/stable`当前为`61aae5691cc3488310c3834c20699d910e5fc639`（Runtime提交`9d9854ca244d21c50231936ffbab9ab48a6fba2b`），`0.7.4`同步已完成`candidate/baibai-0.7.4`审查验证待授权快进合入 |
 
 上述同时登记了NAS当前运行基线与GitHub仓库阶段合入HEAD；当前NAS实际运行组合以Production Baseline的`current_production`为准，Tools线上仍为`2f6a9c54`、BaiBaoKu线上Runtime仍为`b211a4e9`，在统一发布前不单独升级伴随插件。
 
@@ -243,7 +244,7 @@ Owner Review：本轮只改变维护记录和交接文档，没有能力实现�
 3. 将Fork main按fast-forward同步到已选择的上游基线；main不放个人代码或维护策略，不用上游URL无条件更新生产。
 4. 列出受影响Capability、阅读Owner矩阵、检查上游是否已有真正Feature Off。若已有且验证可靠，优先删除个人策略，不能保留两套。
 5. 从现有stable建立独立候选，将已审查main合入并解决最小个人差异。默认保留公开stable历史，避免重写正在被扩展管理器跟踪的分支。
-6. 执行`npm ci --ignore-scripts`、`npm run build`、`npm run test:personal-stable`（含`manifest.json`真实入口`dist/index.js`宿主导入深度/导出符号与无关检出目录一致性门禁）及受影响原有测试；核对源码/dist同步及未增加依赖。
+6. 执行`npm ci --ignore-scripts`、`npm run build`、`npm run test:personal-stable`（含`manifest.json`真实入口`dist/index.js`、`dist/index.css`、17个静态宿主模块白名单、动态宿主导入`/scripts/world-info.js`导出符号及无关检出目录字节一致性门禁）及受影响原有测试；核对源码/dist同步及lockfile差异。
 7. 隔离ST验证legacy true/false/缺省设置、禁用UI、重载、无安装/监听/恢复/轮询/Job，以及普通请求次数与相邻Generate Retry。
 8. 验证候选是旧stable后代，再fast-forward推进`personal/stable`。不得force-push/rebase已公开的stable历史；rebase仅限尚未发布的候选，最终推广仍须保留旧stable祖先关系。
 9. 更新本canonical组合表、Owner/Disabled Features/Decision Log及结果记录；独立审查通过后，才进入另行授权的生产Update和全页重载。
@@ -387,3 +388,26 @@ Real-Device Observation Items（实机验收阶段观察项，不阻断合入）
 - `P2-3`（非默认`perPage=100`三库切入千条书观察项）：默认`perPage=25`已全面提速且`perPage=100`不慢于原生ST候选版；仅在实机体感明显时录制一次浏览器Performance trace定位根因。
 
 Merged Milestone Status：三仓库代码修复、三轮审查收尾（`S1–S2`、`T1–T7`、`K1–K4`、`FX2-1–FX2-3`、`FX3-1–FX3-2`）、全套单测及隔离Chromium三库真实浏览器联跑验收（含`manifest.json → dist/index.js`及17个宿主模块HTTP 200零报错加载、Save Generate关闭核验、主题懒加载剥离+按需水合与世界书切换）均已完成，并按用户授权快进合入各自稳定分支（`SillyTavern:release`阶段Runtime `e92f8dc4dc2b6bed036567e9df6de3c376ffba6d`，`ST-BaiBai-Tools:personal/stable@3314098e1f009c253ed399b84b05876791472484` / Runtime `61180ebd1e7844b2c9a2e9962520608b3b3bf1b2`，`baibaoku:personal/stable@61aae5691cc3488310c3834c20699d910e5fc639` / Runtime `9d9854ca244d21c50231936ffbab9ab48a6fba2b`）。按阶段规划，未修改`personal-release.json`或`PRODUCTION_BASELINE.json`的`current_production`，未构建Docker镜像、未打Tag、未更新NAS，待全部后续链路收口后统一发版与部署。
+
+## 2026-11-13 — 柏宝箱 1.2.0（内置柏宝砚）与柏宝库 0.7.4 三库一体同步审查（Candidate Verified, Pending Merge Authorization）
+
+Scope & Mirror Fast-Forward：
+
+- `SurgeXW0508/ST-BaiBai-Tools:main` 快进同步至 `baibai-git/ST-BaiBai-Tools@d828d6812994414cef24be9e5f995a264e9fe370`（`1.2.0`）；`SurgeXW0508/baibaoku:main` 快进同步至 `baibai-git/baibaoku@d915bc8f0036fb308f02b9a9e52ae880f05d4fe4`（`0.7.4`）；各自 `personal/stable` 保持未动。
+- 在三库候选分支（`SillyTavern:stage/baibai-sync-1.2.0`、`ST-BaiBai-Tools:candidate/baibai-1.2.0`、`baibaoku:candidate/baibai-0.7.4`）完成三位一体兼容性审查、合入、构建与联跑验收。`SillyTavern` 无 Runtime 变更。
+
+Decision & Capability Ownership Review：
+
+1. **全量合入 + 仅在构建/测试/文档层保留个人差异**：`src/pen/**` 与上游 `main` 字节级 100% 一致（`git diff main -- src/pen` 为空），避免维护私有功能分支导致后续跟随上游 `1.2.x` 时产生合并屎山；Save Generate 继续在装配入口完全剥离、不打包入 `dist/index.js`；`newFloorManagerEnabled` 沿用上游默认开启（`true`，Vue 实例与 Shadow Root `dist/index.css` 均按需在首次打开时挂载；检测到独立版 `ST-BaiBai-Pen` / `ST-BaiBai-Inkwell` 启用时自动让出；关闭开关触发 `stopPen()` 断开观察器、卸载 Vue 并移除 `#bby-app-host`）。
+2. **新增能力归属（柏宝砚）**：柏宝箱作为唯一 Owner，仅通过 ST 公共 `saveChat`（`saveChatConditional`）及 `MESSAGE_EDITED` / `MESSAGE_UPDATED` 事件写回聊天（按上游设计绕过 `runOnEdit` 正则，并发校验 `chatId` 与 `expectedText`，保存失败自动回滚内存文本，与流式生成并发时拒绝陈旧覆盖而不交错损坏文本）；世界书仅通过动态导入 `/scripts/world-info.js` 的 `checkWorldInfo(..., isDryRun=true)` 只读激活，不持久化时效计数；Vertex 楼层经柏宝砚改写后 `message.mes` 与 `vertex_response.boundText` 失配，下一轮由 ST Core `reusableVertexDisplayResponse` 自动失效回退纯文本历史，不重放旧 `thoughtSignature`。
+3. **保留的使用与安全边界（不改上游源码，登记于维护文档）**：
+   - **主 API 跟随回退（`R4`）**：保留「跟随主 API」入口（底层调用非流式 `generateRaw` quiet 模式、固定 `responseLength: 65535`，且 ST `generateRaw` 不支持 `AbortSignal` 中断底层请求）；日常改写推荐使用独立副渠道，若临时配合 Vertex 主渠道使用，需保持 Vertex `API 版本` 为「自动」或 `v1beta1`（锁定 `v1` 时 Argon 等模型非流式超过 `32768` 会返回 HTTP 400）。
+   - **副渠道 API Key 明文范围（`§2-D`）**：`baibai_api_channels` 的 API Key 存于 `extension_settings`，会落入同用户目录的 `settings.json`、ST 设置自动备份及柏宝库 `data/<user>/baibaoku/cache/`（信任边界相同，未扩大跨用户暴露面）；日常建议使用低权限/限额 Key，导出或分享设置文件前清理密钥。
+4. **构建门禁升级与柏宝库 `0.7.4` 收口**：`ST-BaiBai-Tools` 的 `test:personal-stable` 升级为显式 17 个静态宿主模块白名单、AST 扫描动态宿主导入（`/scripts/world-info.js` → `checkWorldInfo`）、`dist/index.css` 非空检查、复制源码隔离目录双布局（平铺与嵌套 `public` 陷阱路径）`dist/index.js` + `dist/index.css` 字节级一致及同目录连续两次构建哈希确定性门禁，`.gitignore` 收敛为 `docs/*` + `!docs/PERSONAL_MAINTENANCE.md`；柏宝库 `0.7.4` 收敛 `early-bridge` 扩展根目录 `manifest.json` 精确匹配并在缓存未命中时交还酒馆原生静态路由，保留 `K1–K4`、`FX2-1/2` 与 `FX3-2` 全部个人安全策略。
+
+Verification & Measured Gate Evidence（候选分支）：
+
+- 单测、类型与构建确定性：柏宝库 5 套测试 58/58 通过；柏宝箱 `typecheck:pen` 零错误、`test:pen` 94/94、`test:personal-stable` 15/15、`test:generate-retry` 162/162、`test:preset-backup-retention` 22/22、`test:preset-search` 15/15、改动个人文件 ESLint 零错误，连续两次构建 `dist/index.js`（`c03211c0...`）与 `dist/index.css`（`91145ed0...`）SHA256 完全一致；酒馆 `test:vertex` 40/40、`test:reliability` 17/17 通过。
+- 三库隔离 Chromium 9 场景真实浏览器 E2E 全部通过：`manifest.json` 真实入口 `dist/index.js`、`dist/index.css`、17 个静态宿主模块与 `/scripts/world-info.js` 全部 HTTP 200 且零 `pageerror`；启动按需懒挂载与 Feature Off 回退正常；手动改写、副渠道 Mock OpenAI AI 改写审阅落盘、整页刷新持久化及 Vertex `boundText` 失配失效均符合预期；520 楼长聊天实测 `editButton.ts` 的 `#chat` `MutationObserver` 在高频滚动+每帧 20 节点 CSS 变量写入（1,080 条属性记录）与流式文本追加两类负载下，`syncButtons` 每帧最多执行 `1` 次（`maxSyncPerFrame = 1`），总耗时占比分别为 `0.139%`（`23.33 µs/帧`）与 `0.090%`（`15.00 µs/帧`），远低于 `< 5%` 实测门禁，确认无需追加私有 `attributeFilter` 补丁；编辑态顶/底改写按钮与底部操作栏零乒乓收敛、`settleActiveEditor` 干净退出编辑态；旧版柏宝书只读提示、独立版柏宝砚自动让出、柏宝库 `0.7.4` manifest 缓存命中/未命中回退/子目录直通及主题懒加载水合均正常，Save Generate 请求数为 0。
+- Candidate Status：三个候选分支已就绪待推送与审查，等待用户授权后再快进合入 `release` / `personal/stable`；`personal-release.json`、`PRODUCTION_BASELINE.json` 的 `current_production`、GHCR 镜像与 NAS 保持未动。
+
