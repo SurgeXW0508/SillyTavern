@@ -3876,6 +3876,7 @@ class StreamingProcessor {
 
         let pendingPreview = false;
         let previewFailed = false;
+        this.previewFailed = false;
         try {
             const sw = new Stopwatch(1000 / power_user.streaming_fps);
             const timestamps = [];
@@ -3909,6 +3910,7 @@ class StreamingProcessor {
                         await this.onProgressStreaming(this.messageId, this.continueMessage + text);
                     } catch (error) {
                         previewFailed = true;
+                        this.previewFailed = true;
                         throw error;
                     }
                 });
@@ -3925,6 +3927,7 @@ class StreamingProcessor {
                         await this.onProgressStreaming(this.messageId, this.continueMessage + this.result, true);
                     } catch (previewError) {
                         previewFailed = true;
+                        this.previewFailed = true;
                         console.error('Failed to render the last received stream content:', previewError);
                     }
                 }
