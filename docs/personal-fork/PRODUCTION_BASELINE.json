@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-11-12",
+  "updated_at": "2026-11-13",
   "phase_c_status": "formal_ghcr_deployed_basic_smoke_passed",
   "current_production": {
     "source": "user_provided_nas_results_2026-11-09",
@@ -233,29 +233,60 @@
     "ghcr_image_built": false,
     "nas_deployed": false,
     "real_google_or_nas_verified": false,
-    "status": "merged_to_release_awaiting_performance_phase_before_docker_build",
-    "note": "Fast-forward merged into release as a reviewed stage milestone without modifying personal-release.json or triggering GHCR build; unified Docker build and NAS verification deferred until after the upcoming performance/fix phase."
+    "status": "superseded_by_perf_worldinfo_milestone_on_release",
+    "note": "Fast-forward merged into release as a reviewed stage milestone without modifying personal-release.json or triggering GHCR build; followed by the 2026-11-13 perf_ownership_milestone."
+  },
+  "perf_ownership_milestone": {
+    "merged_at": "2026-11-13",
+    "sillytavern_branch": "release",
+    "sillytavern_source_branch": "stage/perf-worldinfo",
+    "sillytavern_base_release_commit": "c534e31887f62913e821367be2671086bac64cb3",
+    "sillytavern_runtime_commit": "e92f8dc4dc2b6bed036567e9df6de3c376ffba6d",
+    "sillytavern_runtime_commits": [
+      "a67668f9c8819e49ab53588b3714d3d5ee04bc1e",
+      "ec3e59cdf5b48e11026be6cf296350615091982e",
+      "e92f8dc4dc2b6bed036567e9df6de3c376ffba6d"
+    ],
+    "tools_branch": "personal/stable",
+    "tools_source_branch": "candidate/perf-worldinfo",
+    "tools_base_stable_commit": "2816699503d8bbab1e601f955ecefe30d8b2e57d",
+    "tools_head_commit": "3314098e1f009c253ed399b84b05876791472484",
+    "tools_runtime_commit": "61180ebd1e7844b2c9a2e9962520608b3b3bf1b2",
+    "baibaoku_branch": "personal/stable",
+    "baibaoku_source_branch": "candidate/perf-worldinfo",
+    "baibaoku_base_stable_commit": "c56b5533167647df1a8dbebe5867c13ea5c781ab",
+    "baibaoku_head_commit": "61aae5691cc3488310c3834c20699d910e5fc639",
+    "baibaoku_runtime_commit": "9d9854ca244d21c50231936ffbab9ab48a6fba2b",
+    "scope": "worldinfo_switch_perf_ownership_convergence_authoritative_extension_tracking_and_layout_independent_tools_dist",
+    "personal_release_json_updated": false,
+    "ghcr_image_built": false,
+    "nas_deployed": false,
+    "real_google_or_nas_verified": false,
+    "status": "merged_to_release_and_personal_stable_awaiting_remaining_phases_before_unified_release",
+    "note": "Fast-forward merged across SillyTavern:release, ST-BaiBai-Tools:personal/stable, and baibaoku:personal/stable after three review rounds and 3-repo Chromium E2E verification; personal-release.json, GHCR images, and NAS remain untouched until all planned work is completed."
   },
   "repository_heads": {
-    "verified_at": "2026-11-12",
+    "verified_at": "2026-11-13",
     "sillytavern_upstream_release": "06bde939fb1e9c4c8d8641d810f0a916b5bce127",
-    "sillytavern_release_runtime_commit": "e49a694083cc46dbf883f13eab664076c139011f",
-    "sillytavern_release_delta_from_production": "vertex_milestone_merged_to_release_pending_next_ghcr_release",
+    "sillytavern_release_runtime_commit": "e92f8dc4dc2b6bed036567e9df6de3c376ffba6d",
+    "sillytavern_release_delta_from_production": "vertex_and_perf_ownership_milestones_merged_to_release_pending_unified_ghcr_release",
     "tools_main": "1e87dfaad87819a90d8032530a62a2ed29f97aea",
-    "tools_personal_stable": "2816699503d8bbab1e601f955ecefe30d8b2e57d",
+    "tools_personal_stable": "3314098e1f009c253ed399b84b05876791472484",
+    "tools_personal_stable_runtime_commit": "61180ebd1e7844b2c9a2e9962520608b3b3bf1b2",
     "tools_nas_installed_sha": "2f6a9c54d2c906b4a0e44d20c12d0712552e393d",
-    "tools_personal_stable_delta_from_nas": "documentation_only",
+    "tools_personal_stable_delta_from_nas": "perf_ownership_and_fx3_dist_merged_pending_unified_nas_update",
     "baibaoku_main": "b211a4e97fdaec24dc8b90c85ddc198fac9ac200",
-    "baibaoku_personal_stable": "c56b5533167647df1a8dbebe5867c13ea5c781ab",
+    "baibaoku_personal_stable": "61aae5691cc3488310c3834c20699d910e5fc639",
+    "baibaoku_personal_stable_runtime_commit": "9d9854ca244d21c50231936ffbab9ab48a6fba2b",
     "baibaoku_nas_installed_sha": "4814830f2d161dfff89e75370effa31d669586d9",
     "baibaoku_nas_origin": "SurgeXW0508/baibaoku",
     "baibaoku_nas_branch": "personal/stable",
-    "baibaoku_personal_stable_delta_from_runtime_base": "documentation_only",
+    "baibaoku_personal_stable_delta_from_runtime_base": "perf_ownership_and_fx3_tracking_merged_pending_unified_nas_update",
     "baibaoku_nas_runtime_sha": "b211a4e97fdaec24dc8b90c85ddc198fac9ac200",
     "baibaoku_nas_upstream": "baibai-git/baibaoku",
     "baibaoku_nas_tracking": "origin/personal/stable",
     "baibaoku_nas_worktree": "clean",
     "baibaoku_nas_backup_branch": "backup/pre-personal-stable-20261112",
-    "baibaoku_personal_stable_delta_from_nas": "documentation_only_one_commit"
+    "baibaoku_personal_stable_delta_from_nas": "perf_ownership_and_fx3_tracking_merged_pending_unified_nas_update"
   }
 }

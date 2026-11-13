@@ -10,7 +10,7 @@ Canonical compatibility document。当前正式制品为[v1.19.0-personal.1](htt
 
 正式镜像仅确认启动、Health、Vertex普通RP正文生成、刷新后聊天记录保留。Candidate的多轮、Stop、Regenerate等历史结果单独保留，不自动算作正式镜像已验证。清理、备份恢复、飞牛GUI方案和既有安全警告的后续责任见Operations待办；本轮不处理这些事项。
 
-2026-11-12阶段性仓库状态：Vertex协议契约、封闭枚举诊断、多媒体共享凭据域名守卫与流式/重放收尾已合入个人`release`分支（阶段Runtime基线`e49a694083cc46dbf883f13eab664076c139011f`），暂未修改`personal-release.json`、暂未构建新GHCR镜像或部署NAS；线上生产仍为`v1.19.0-personal.1`（Runtime `090cbba6d40e5d117ab41a9e6deb20b40e2dc336`），待后续性能优化与修复阶段完成后统一发版与实机验证。
+2026-11-12至2026-11-13阶段性仓库状态：Vertex协议契约、封闭枚举诊断、多媒体共享凭据域名守卫与流式/重放收尾（Runtime `e49a694083cc46dbf883f13eab664076c139011f`）及三仓库世界书性能优化、能力归属收敛、构建交付入口与扩展更新跟踪安全边界（ST `release`阶段Runtime `e92f8dc4dc2b6bed036567e9df6de3c376ffba6d`、柏宝箱`personal/stable@3314098e` / Runtime `61180ebd`、柏宝库`personal/stable@61aae569` / Runtime `9d9854ca`）已先后快进合入各自稳定分支；暂未修改`personal-release.json`、暂未构建新GHCR镜像或更新NAS，线上生产仍为`v1.19.0-personal.1`（ST Runtime `090cbba6d40e5d117ab41a9e6deb20b40e2dc336`、Tools `2f6a9c54`、BaiBaoKu `4814830f` / Runtime `b211a4e9`），待全部后续链路完成后统一发版与实机验证。
 
 Decision Log、SH取舍索引及C-E0交接是对应阶段的历史证据。已发布Release资产中的compatibility是发布时快照，不修改其内容来补填后续实机结果；当前生产事实更新在Production Baseline。
 
@@ -80,12 +80,12 @@ Decision Log、SH取舍索引及C-E0交接是对应阶段的历史证据。已�
 
 | Component | Source / branch | 精确验证基线 |
 | --- | --- | --- |
-| Personal ST运行代码 | `SurgeXW0508/SillyTavern:release` | NAS正式生产仍为`090cbba6d40e5d117ab41a9e6deb20b40e2dc336`（`v1.19.0-personal.1`）；仓库`release`已阶段性合入Vertex收尾Runtime `e49a694083cc46dbf883f13eab664076c139011f`（暂未构建新GHCR镜像） |
+| Personal ST运行代码 | `SurgeXW0508/SillyTavern:release` | NAS正式生产仍为`090cbba6d40e5d117ab41a9e6deb20b40e2dc336`（`v1.19.0-personal.1`）；仓库`release`已阶段性合入Vertex收尾（`e49a6940`）与三仓库性能/归属收敛（最新阶段Runtime `e92f8dc4dc2b6bed036567e9df6de3c376ffba6d`，暂未构建新GHCR镜像） |
 | 柏宝箱上游同步基线 | `baibai-git/ST-BaiBai-Tools:main` → `SurgeXW0508/ST-BaiBai-Tools:main` | `1e87dfaad87819a90d8032530a62a2ed29f97aea`，实际package/manifest版本1.1.5 |
-| 柏宝箱唯一个人部署分支 | `SurgeXW0508/ST-BaiBai-Tools:personal/stable` | `2f6a9c54d2c906b4a0e44d20c12d0712552e393d`为NAS验证Runtime；当前远端维护HEAD `2816699503d8bbab1e601f955ecefe30d8b2e57d`仅文档变更，源码/dist相同；NAS仍跟踪`origin/personal/stable` |
-| 柏宝库唯一个人部署分支 | `SurgeXW0508/baibaoku:personal/stable` | NAS Git HEAD `4814830f2d161dfff89e75370effa31d669586d9`；Runtime仍为`b211a4e97fdaec24dc8b90c85ddc198fac9ac200`（0.7.3），本次仅文档变更；跟踪`origin/personal/stable`，原作者为`upstream` |
+| 柏宝箱唯一个人部署分支 | `SurgeXW0508/ST-BaiBai-Tools:personal/stable` | NAS当前仍为`2f6a9c54d2c906b4a0e44d20c12d0712552e393d`（跟踪`origin/personal/stable`）；仓库`personal/stable`已阶段性快进合入至`3314098e1f009c253ed399b84b05876791472484`（Runtime/`dist`提交`61180ebd1e7844b2c9a2e9962520608b3b3bf1b2`），待统一发版后在NAS更新 |
+| 柏宝库唯一个人部署分支 | `SurgeXW0508/baibaoku:personal/stable` | NAS当前Git HEAD仍为`4814830f2d161dfff89e75370effa31d669586d9`（Runtime基线`b211a4e97fdaec24dc8b90c85ddc198fac9ac200` / 0.7.3，跟踪`origin/personal/stable`，原作者为`upstream`）；仓库`personal/stable`已阶段性快进合入至`61aae5691cc3488310c3834c20699d910e5fc639`（Runtime提交`9d9854ca244d21c50231936ffbab9ab48a6fba2b`），待统一发版后在NAS更新 |
 
-上述包含冻结验证基线与仓库维护HEAD；当前NAS实际组合已在Production Baseline登记，Tools实际仍为`2f6a9c54`，不能用维护HEAD `ac1279a7`替代。柏宝箱个人差异只有Save Generate生命周期关闭策略、对应构建/测试和简短维护入口；没有Vertex Adapter，也没有其他柏宝优化修改。
+上述同时登记了NAS当前运行基线与GitHub仓库阶段合入HEAD；当前NAS实际运行组合以Production Baseline的`current_production`为准，Tools线上仍为`2f6a9c54`、BaiBaoKu线上Runtime仍为`b211a4e9`，在统一发布前不单独升级伴随插件。
 
 此前审查的上游1.1.5仍无条件装配Save Generate、默认开启并存在false→true旧迁移。Personal Stable在装配入口移除导入/安装及面板通知，设置归一false、移除强制开启迁移、UI固定禁用；不物理删除上游模块，也不需要手工删源码或额外Patch。Generate Retry是另一功能，本策略没有修改其实现。生产dist从锁定依赖的源码构建，连续两次构建哈希一致。
 
@@ -248,7 +248,7 @@ Owner Review：本轮只改变维护记录和交接文档，没有能力实现�
 8. 验证候选是旧stable后代，再fast-forward推进`personal/stable`。不得force-push/rebase已公开的stable历史；rebase仅限尚未发布的候选，最终推广仍须保留旧stable祖先关系。
 9. 更新本canonical组合表、Owner/Disabled Features/Decision Log及结果记录；独立审查通过后，才进入另行授权的生产Update和全页重载。
 
-不可删除或改名柏宝箱或柏宝库的`personal/stable`。2026-11-13候选分支已收口扩展管理接管策略：柏宝库默认要求直连或代理等权威线路确认目标SHA（`allowUnverifiedMirrorDecision: false`、云端镜像兜底`cloudMirrorsEnabled: false`），在`system`与`builtin`双适配器中同时完整核验`branch.<name>.remote`与`branch.<name>.merge`（`FX3-2`）——显式跟踪非`origin`远端（如`upstream`）一律报`UNSUPPORTED_UPSTREAM`拦截，单边缺失/格式不合法报`NO_UPSTREAM`拦截，`personal/*`分支必须具备完整的`origin`上游跟踪，仅完全未配置`remote`/`merge`的非`personal/*`分支在权威线路确认远端存在`origin/<同名分支>`时才按同名分支更新并自动补写跟踪配置，游离`HEAD`或远端无同名分支一律报`NO_UPSTREAM`，任何情况下（含`force: true`）严禁自动切向远端默认分支；柏宝箱前端仅在确认后端接管开启时才改写`/api/extensions/*`（非`unsupported`临时读取失败设60s冷却期），且浏览器侧兜底更新检查改为读取个人Fork `SurgeXW0508/ST-BaiBai-Tools`的`personal/stable` manifest，不再读取上游`baibai-git/.../main`。日常个人更新仍以ST扩展管理器的当前分支、commit及远端检查为准。
+不可删除或改名柏宝箱或柏宝库的`personal/stable`。2026-11-13已收口并合入`personal/stable`扩展管理接管策略：柏宝库默认要求直连或代理等权威线路确认目标SHA（`allowUnverifiedMirrorDecision: false`、云端镜像兜底`cloudMirrorsEnabled: false`），在`system`与`builtin`双适配器中同时完整核验`branch.<name>.remote`与`branch.<name>.merge`（`FX3-2`）——显式跟踪非`origin`远端（如`upstream`）一律报`UNSUPPORTED_UPSTREAM`拦截，单边缺失/格式不合法报`NO_UPSTREAM`拦截，`personal/*`分支必须具备完整的`origin`上游跟踪，仅完全未配置`remote`/`merge`的非`personal/*`分支在权威线路确认远端存在`origin/<同名分支>`时才按同名分支更新并自动补写跟踪配置，游离`HEAD`或远端无同名分支一律报`NO_UPSTREAM`，任何情况下（含`force: true`）严禁自动切向远端默认分支；柏宝箱前端仅在确认后端接管开启时才改写`/api/extensions/*`（非`unsupported`临时读取失败设60s冷却期），且浏览器侧兜底更新检查改为读取个人Fork `SurgeXW0508/ST-BaiBai-Tools`的`personal/stable` manifest，不再读取上游`baibai-git/.../main`。日常个人更新仍以ST扩展管理器的当前分支、commit及远端检查为准。
 
 ## 柏宝库 Personal Fork 与固定生产分支策略
 
@@ -256,8 +256,8 @@ Owner Review：本轮只改变维护记录和交接文档，没有能力实现�
 
 - `main`：纯上游同步镜像，只接收原作者main，不放个人Runtime策略。
 - `personal/stable`：唯一生产分支，NAS只允许跟踪此分支。
-- `personal/stable`于2026-11-12从个人Fork的main创建，初始Runtime基线为`b211a4e97fdaec24dc8b90c85ddc198fac9ac200`（0.7.3），与上游等价；本次创建分支和新增维护文档不包含Runtime改动。
-- 2026-11-12已完成NAS Git跟踪关系整理：`origin`指向`SurgeXW0508/baibaoku`，`upstream`指向`baibai-git/baibaoku`，当前`personal/stable`跟踪`origin/personal/stable`，工作区clean。NAS HEAD为`4814830f`，原Runtime基线`b211a4e9`保留在`backup/pre-personal-stable-20261112`。截至本次文档核验，GitHub `origin/personal/stable` 为`c56b5533`，比NAS本地HEAD多3个仅修改维护Runbook的文档提交；Runtime未变化。本次只修改Git元数据并切换到文档提交，未更新Runtime或重启容器。
+- `personal/stable`于2026-11-12从个人Fork的main创建，初始Runtime基线为`b211a4e97fdaec24dc8b90c85ddc198fac9ac200`（0.7.3），与上游等价；初始建分支和新增维护文档不包含Runtime改动。
+- 2026-11-12已完成NAS Git跟踪关系整理：`origin`指向`SurgeXW0508/baibaoku`，`upstream`指向`baibai-git/baibaoku`，当前`personal/stable`跟踪`origin/personal/stable`，工作区clean。NAS HEAD为`4814830f`，原Runtime基线`b211a4e9`保留在`backup/pre-personal-stable-20261112`。2026-11-13已将经过审查与三库联跑验证的能力归属收敛与`FX3-2`完整跟踪核验快进合入`origin/personal/stable`（`61aae569` / Runtime `9d9854ca`）；NAS尚未拉取该阶段合入，线上Runtime仍为`b211a4e9`，待全部后续链路完成后统一部署。
 
 ### 上游更新流程
 
@@ -349,7 +349,7 @@ Capability Ownership Review & Security Boundary：
 
 Scope & Deployment Status：已在`stage/vertex-protocol-and-ux`完成内部diff审查与外部安全/协议复核修复，全部检查通过（`lint`、`test:vertex` 40/40、`test:reliability` 17/17、`test:unit` 412/412、`release.node.mjs` 13/13、Python治理单测 4/4、真实Chromium E2E `VertexNative.e2e.js` + `CoreStreaming.e2e.js` 33/33、柏宝箱`test:personal-stable` 6/6、柏宝库5个Bridge锚点幂等核验 5/5），并基于`fdfad0703ad8bd08ba0d5cc90d0c6f15abecfc5d`快进合入个人`release`分支（阶段Runtime提交链：`fbdcfae4ef39e4bd624d81a01c35421d407e017e` → `206fc2476d76dadc2b24a6214d9dcea607265c8b` → `e49a694083cc46dbf883f13eab664076c139011f`）。按阶段规划，未修改`personal-release.json`（保持在已发布版本`v1.19.0-personal.1` / `090cbba6d40e5d117ab41a9e6deb20b40e2dc336`，避免提前触发`personal-release.yml`自动构建GHCR镜像；在此期间`scripts/personal/release.mjs check`会按设计提示相对`090cbba6`的Runtime差异，直至下一正式版本发版时同步更新`personal-release.json`）；已在`PRODUCTION_BASELINE.json`的`release_branch_milestone`与`repository_heads`登记仓库阶段基线，不改动`current_production`；未构建Docker镜像、未打Tag、未操作NAS生产环境，待后续性能优化与修复阶段完成后统一构建镜像并进行实机Google/NAS验收。
 
-## 2026-11-13 — 用户授权的三仓库性能优化与 Pending Ownership 收敛（Candidate 待审）
+## 2026-11-13 — 用户授权的三仓库性能优化与 Pending Ownership 收敛（Merged to release / personal/stable）
 
 Authorization & Scope：由用户明确授权在Vertex收尾后进入“三仓库性能优化（聚焦世界书`#world_editor_select`切换卡顿）+ Pending Ownership收敛 + 扩展镜像供应链边界加固”阶段。全程严守不触碰Vertex主链路、不恢复Save Generate、不引入新框架/新缓存层/新依赖的边界。
 
@@ -386,4 +386,4 @@ Real-Device Observation Items（实机验收阶段观察项，不阻断合入）
 - `P2-2`（含宏世界书预算预热边界）：正确性优先使预热在首条含宏条目处停止；实机接入OpenAI兼容渠道后，统计单次生成期间`/api/tokenizers/openai/count`的实际调用次数，若有明显耗时再单独经Capability Ownership Review评估由ST Owner侧收敛预算批量计数。
 - `P2-3`（非默认`perPage=100`三库切入千条书观察项）：默认`perPage=25`已全面提速且`perPage=100`不慢于原生ST候选版；仅在实机体感明显时录制一次浏览器Performance trace定位根因。
 
-Candidate Status：三仓库代码修复、三轮审查收尾（`S1–S2`、`T1–T7`、`K1–K4`、`FX2-1–FX2-3`、`FX3-1–FX3-2`）、全套单测及隔离Chromium三库真实浏览器联跑验收（含`manifest.json → dist/index.js`及17个宿主模块HTTP 200零报错加载、Save Generate关闭核验、主题懒加载剥离+按需水合与世界书切换）均已完成并提交在各自候选分支（ST `stage/perf-worldinfo`、Tools `candidate/perf-worldinfo`已同步构建`dist/index.js`、BaiBaoKu `candidate/perf-worldinfo`），尚未合入`release`或`personal/stable`，未修改`personal-release.json`或`PRODUCTION_BASELINE.json`的`current_production`，未构建Docker镜像、未操作NAS，待用户确认后按授权推进合并与部署。
+Merged Milestone Status：三仓库代码修复、三轮审查收尾（`S1–S2`、`T1–T7`、`K1–K4`、`FX2-1–FX2-3`、`FX3-1–FX3-2`）、全套单测及隔离Chromium三库真实浏览器联跑验收（含`manifest.json → dist/index.js`及17个宿主模块HTTP 200零报错加载、Save Generate关闭核验、主题懒加载剥离+按需水合与世界书切换）均已完成，并按用户授权快进合入各自稳定分支（`SillyTavern:release`阶段Runtime `e92f8dc4dc2b6bed036567e9df6de3c376ffba6d`，`ST-BaiBai-Tools:personal/stable@3314098e1f009c253ed399b84b05876791472484` / Runtime `61180ebd1e7844b2c9a2e9962520608b3b3bf1b2`，`baibaoku:personal/stable@61aae5691cc3488310c3834c20699d910e5fc639` / Runtime `9d9854ca244d21c50231936ffbab9ab48a6fba2b`）。按阶段规划，未修改`personal-release.json`或`PRODUCTION_BASELINE.json`的`current_production`，未构建Docker镜像、未打Tag、未更新NAS，待全部后续链路收口后统一发版与部署。

@@ -137,7 +137,8 @@ Runtime故障优先回到上一个已验证镜像，同时确认Tools/BaiBaoKu�
 
 ## 当前仓库与发布状态
 
-2026-11-12维护与阶段合入记录：
+2026-11-12至2026-11-13维护与阶段合入记录：
 
 - 部署流程与分支治理：已确认飞牛Compose图形化更新入口、建立柏宝箱与柏宝库个人维护Runbook，并完成柏宝库NAS Git跟踪关系整理（`personal/stable@4814830f`，跟踪`origin/personal/stable`）。
-- Vertex阶段性收尾合入`release`：已将经过内部diff审查与外部安全/协议复核的Vertex收尾分支`stage/vertex-protocol-and-ux`快进合入`release`（阶段Runtime基线`e49a694083cc46dbf883f13eab664076c139011f`）。按阶段规划暂不修改`personal-release.json`、不创建Tag/GitHub Release、不触发GHCR Docker构建、不更新NAS或重启容器；待后续性能优化与修复阶段完成后统一发版与实机验证。
+- Vertex阶段性收尾合入`release`（2026-11-12）：已将经过内部diff审查与外部安全/协议复核的Vertex收尾分支`stage/vertex-protocol-and-ux`快进合入`release`（阶段Runtime基线`e49a694083cc46dbf883f13eab664076c139011f`）。
+- 三仓库性能优化与能力归属收敛合入`release` / `personal/stable`（2026-11-13）：已完成内部审查、外部复核闭环（含柏宝箱`FX3-1`构建产物路径脱离检出目录依赖与柏宝库`FX3-2`双后端完整`origin`跟踪核验）及真实Chromium三库联跑验收，并按用户授权将`SillyTavern` `stage/perf-worldinfo`快进合入`release`（阶段Runtime基线`e92f8dc4dc2b6bed036567e9df6de3c376ffba6d`）、`ST-BaiBai-Tools` `candidate/perf-worldinfo`快进合入`personal/stable`（`3314098e1f009c253ed399b84b05876791472484`，Runtime/`dist` `61180ebd1e7844b2c9a2e9962520608b3b3bf1b2`）、`baibaoku` `candidate/perf-worldinfo`快进合入`personal/stable`（`61aae5691cc3488310c3834c20699d910e5fc639`，Runtime `9d9854ca244d21c50231936ffbab9ab48a6fba2b`）。按阶段规划暂不修改`personal-release.json`、不创建Tag/GitHub Release、不触发GHCR Docker构建、不更新NAS或重启容器（在此之前请勿在NAS酒馆扩展管理器单独点击更新伴随插件）；待后续未完成链路全部收口后统一发版与实机验证。
