@@ -2733,13 +2733,13 @@ function verifyWorldInfoSearchSortRule() {
     }
 }
 
-/** @type {WeakMap<any[], { length: number, first: any, last: any, byUid: Map<any, object> }>} */
+/** @type {WeakMap<any[], { length: number, first: any, last: any, byUid: Map<any, number> }>} */
 const wiOriginalEntriesIndexCache = new WeakMap();
 
 /**
- * Returns a uid->entry lookup map for `data.originalData.entries`, rebuilding if mutated.
+ * Returns a uid->index lookup map for `data.originalData.entries`, rebuilding if mutated.
  * @param {any[]} entries
- * @returns {Map<any, object>}
+ * @returns {Map<any, number>}
  */
 function getWIOriginalEntriesIndex(entries) {
     const len = entries.length;
@@ -2751,7 +2751,7 @@ function getWIOriginalEntriesIndex(entries) {
         for (let i = 0; i < len; i++) {
             const entry = entries[i];
             if (entry && typeof entry === 'object' && !byUid.has(entry.uid)) {
-                byUid.set(entry.uid, entry);
+                byUid.set(entry.uid, i);
             }
         }
         cached = { length: len, first, last, byUid };
@@ -2773,14 +2773,14 @@ function getWIOriginalEntriesIndex(entries) {
 export function setWIOriginalDataValue(data, uid, key, value) {
     if (data.originalData && Array.isArray(data.originalData.entries)) {
         const entries = data.originalData.entries;
-        const byUid = getWIOriginalEntriesIndex(entries);
-        let originalEntry = byUid.get(uid);
-        if (originalEntry && originalEntry.uid !== uid) {
+        let idx = getWIOriginalEntriesIndex(entries).get(uid);
+        if (idx === undefined || !entries[idx] || typeof entries[idx] !== 'object' || entries[idx].uid !== uid) {
             wiOriginalEntriesIndexCache.delete(entries);
-            originalEntry = getWIOriginalEntriesIndex(entries).get(uid);
+            idx = getWIOriginalEntriesIndex(entries).get(uid);
         }
 
-        if (!originalEntry) {
+        const originalEntry = idx !== undefined ? entries[idx] : undefined;
+        if (!originalEntry || typeof originalEntry !== 'object' || originalEntry.uid !== uid) {
             return;
         }
 

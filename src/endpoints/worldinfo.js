@@ -7,6 +7,7 @@ import _ from 'lodash';
 import { sync as writeFileAtomicSync } from 'write-file-atomic';
 import { tryParse } from '../util.js';
 
+// 注意：与 readWorldInfoFileAsync 语义必须同步修改
 /**
  * Reads a World Info file and returns its contents
  * @param {import('../users.js').UserDirectoryList} directories User directories
@@ -34,6 +35,7 @@ export function readWorldInfoFile(directories, worldInfoName, allowDummy) {
     return worldInfo;
 }
 
+// 注意：与 readWorldInfoFile 语义必须同步修改
 /**
  * Asynchronously reads a World Info file and returns its contents
  * @param {import('../users.js').UserDirectoryList} directories User directories
