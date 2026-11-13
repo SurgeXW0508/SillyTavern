@@ -217,9 +217,30 @@
     "assessment": "not_separately_assessed",
     "owner": "deployment_maintainer_in_a_separate_security_review"
   },
+  "release_branch_milestone": {
+    "merged_at": "2026-11-12",
+    "branch": "release",
+    "source_branch": "stage/vertex-protocol-and-ux",
+    "base_release_commit": "fdfad0703ad8bd08ba0d5cc90d0c6f15abecfc5d",
+    "runtime_commit": "e49a694083cc46dbf883f13eab664076c139011f",
+    "runtime_commits": [
+      "fbdcfae4ef39e4bd624d81a01c35421d407e017e",
+      "206fc2476d76dadc2b24a6214d9dcea607265c8b",
+      "e49a694083cc46dbf883f13eab664076c139011f"
+    ],
+    "scope": "vertex_protocol_matrix_rpc_diagnostics_legacy_host_guard_and_replay_invariants",
+    "personal_release_json_updated": false,
+    "ghcr_image_built": false,
+    "nas_deployed": false,
+    "real_google_or_nas_verified": false,
+    "status": "merged_to_release_awaiting_performance_phase_before_docker_build",
+    "note": "Fast-forward merged into release as a reviewed stage milestone without modifying personal-release.json or triggering GHCR build; unified Docker build and NAS verification deferred until after the upcoming performance/fix phase."
+  },
   "repository_heads": {
     "verified_at": "2026-11-12",
     "sillytavern_upstream_release": "06bde939fb1e9c4c8d8641d810f0a916b5bce127",
+    "sillytavern_release_runtime_commit": "e49a694083cc46dbf883f13eab664076c139011f",
+    "sillytavern_release_delta_from_production": "vertex_milestone_merged_to_release_pending_next_ghcr_release",
     "tools_main": "1e87dfaad87819a90d8032530a62a2ed29f97aea",
     "tools_personal_stable": "2816699503d8bbab1e601f955ecefe30d8b2e57d",
     "tools_nas_installed_sha": "2f6a9c54d2c906b4a0e44d20c12d0712552e393d",

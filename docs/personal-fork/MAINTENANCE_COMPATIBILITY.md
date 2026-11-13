@@ -10,6 +10,8 @@ Canonical compatibility document。当前正式制品为[v1.19.0-personal.1](htt
 
 正式镜像仅确认启动、Health、Vertex普通RP正文生成、刷新后聊天记录保留。Candidate的多轮、Stop、Regenerate等历史结果单独保留，不自动算作正式镜像已验证。清理、备份恢复、飞牛GUI方案和既有安全警告的后续责任见Operations待办；本轮不处理这些事项。
 
+2026-11-12阶段性仓库状态：Vertex协议契约、封闭枚举诊断、多媒体共享凭据域名守卫与流式/重放收尾已合入个人`release`分支（阶段Runtime基线`e49a694083cc46dbf883f13eab664076c139011f`），暂未修改`personal-release.json`、暂未构建新GHCR镜像或部署NAS；线上生产仍为`v1.19.0-personal.1`（Runtime `090cbba6d40e5d117ab41a9e6deb20b40e2dc336`），待后续性能优化与修复阶段完成后统一发版与实机验证。
+
 Decision Log、SH取舍索引及C-E0交接是对应阶段的历史证据。已发布Release资产中的compatibility是发布时快照，不修改其内容来补填后续实机结果；当前生产事实更新在Production Baseline。
 
 ## 稳定维护原则
@@ -48,11 +50,11 @@ Decision Log、SH取舍索引及C-E0交接是对应阶段的历史证据。已�
 
 | Capability | Owner | 其他实现 | Policy |
 | --- | --- | --- | --- |
-| Vertex请求协议、认证、传输 | ST | Shalistera仅来源参考 | ST only；不整体合并参考分支 |
-| Thinking / Reasoning / Thought Signature | ST | 旧插件适配已撤回 | 按原始Part保存；编辑使对应正文重放失效 |
-| Tool Calling原生语义与历史 | ST | 柏宝后台执行不采用 | ST调用工具；保留id/name/参数/顺序/有效调用签名 |
+| Vertex请求协议、认证、传输 | ST | Shalistera仅来源参考 | ST only；不整体合并参考分支；聊天与多媒体共用官方Google域名白名单；封闭枚举RPC诊断与等待/缓存状态栏 |
+| Thinking / Reasoning / Thought Signature | ST | 旧插件适配已撤回 | 按原始Part保存；编辑使对应正文重放失效；保留角色名前缀为独立无签名Part |
+| Tool Calling原生语义与历史 | ST | 柏宝后台执行不采用 | ST调用工具；保留id/name/参数/顺序/有效调用签名；functionCall仅经成对tool_invocations载体消息重放 |
 | Generate、Continue、Swipe、Regenerate | ST | Save Generate关闭 | 同一原生请求链 |
-| Partial / Failed / Canceled | ST | — | partial保留可用内容和终态；异常终态不自动执行工具或续发 |
+| Partial / Failed / Canceled | ST | — | partial保留可用内容和终态；流式零内容错误抛错不落空消息；异常终态不自动执行工具、不重放未执行functionCall、不续发 |
 | 历史Prompt语义 | ST | — | 当前消息为语义来源，不能因旧response ID恢复已编辑/删除正文 |
 | 基础聊天保存 | ST | 柏宝恢复不采用 | 保持上游公共saveChat契约；不得删除已有数据 |
 | Save Generate / 后台任务 / 消息恢复 | 柏宝，但本组合不启用 | ST正常生成 | 整个Save Generate关闭；不保留Vertex内部调用契约 |
@@ -72,7 +74,7 @@ Decision Log、SH取舍索引及C-E0交接是对应阶段的历史证据。已�
 
 | Component | Source / branch | 精确验证基线 |
 | --- | --- | --- |
-| Personal ST运行代码 | `SurgeXW0508/SillyTavern:release`（冻结Runtime） | `090cbba6d40e5d117ab41a9e6deb20b40e2dc336`；Phase C冻结运行基线；之后的C-E0提交仅修改文档 |
+| Personal ST运行代码 | `SurgeXW0508/SillyTavern:release` | NAS正式生产仍为`090cbba6d40e5d117ab41a9e6deb20b40e2dc336`（`v1.19.0-personal.1`）；仓库`release`已阶段性合入Vertex收尾Runtime `e49a694083cc46dbf883f13eab664076c139011f`（暂未构建新GHCR镜像） |
 | 柏宝箱上游同步基线 | `baibai-git/ST-BaiBai-Tools:main` → `SurgeXW0508/ST-BaiBai-Tools:main` | `1e87dfaad87819a90d8032530a62a2ed29f97aea`，实际package/manifest版本1.1.5 |
 | 柏宝箱唯一个人部署分支 | `SurgeXW0508/ST-BaiBai-Tools:personal/stable` | `2f6a9c54d2c906b4a0e44d20c12d0712552e393d`为NAS验证Runtime；当前远端维护HEAD `2816699503d8bbab1e601f955ecefe30d8b2e57d`仅文档变更，源码/dist相同；NAS仍跟踪`origin/personal/stable` |
 | 柏宝库唯一个人部署分支 | `SurgeXW0508/baibaoku:personal/stable` | NAS Git HEAD `4814830f2d161dfff89e75370effa31d669586d9`；Runtime仍为`b211a4e97fdaec24dc8b90c85ddc198fac9ac200`（0.7.3），本次仅文档变更；跟踪`origin/personal/stable`，原作者为`upstream` |
@@ -190,7 +192,7 @@ C-E0只登记和交接文档；Stage HEAD可以因此前进。C-E0本地Candidat
 
 冻结后仅以下情况允许重新开发：真实验收发现P1、安全问题、数据正确性问题。必须记录复现、Owner、影响面和受影响测试，再提交新的候选。Shalistera性能优化、benchmark更快、顺手重构、UI小优化和Pending Ownership尚未处理均不能解除冻结。
 
-C-E0首次手工Candidate过程保留在[历史交接](PHASE_C_DEPLOYMENT_HANDOFF.md)。此前Final Delta Audit / 发布收口已通过审查和CI，快进合入release并发布v1.19.0-personal.1，Tools AGENTS已切换到release链接。正式镜像与更新/回滚入口见[Personal Release Operations](PERSONAL_RELEASE_OPERATIONS.md)。用户之后已完成正式NAS镜像切换；Work本轮没有SSH或生产操作，也未清理资产。Owner矩阵仍只维护在本文。
+C-E0首次手工Candidate过程保留在[历史交接](PHASE_C_DEPLOYMENT_HANDOFF.md)。此前Final Delta Audit / 发布收口已通过审查和CI，快进合入release并发布v1.19.0-personal.1，Tools AGENTS已切换到release链接。正式镜像与更新/回滚入口见[Personal Release Operations](PERSONAL_RELEASE_OPERATIONS.md)。用户之后已完成正式NAS镜像切换；Work本轮没有SSH或生产操作，也未清理资产。Owner矩阵仍只维护在本文。2026-11-12针对满足上述重开门槛的Vertex凭据边界、P1协议契约及流式/重放正确性问题完成独立开发与审查，阶段性快进合入`release`（Runtime `e49a694083cc46dbf883f13eab664076c139011f`），详见文末2026-11-12记录。
 
 ### 2026-11-09 — Phase C-E0 freeze registration
 
@@ -327,7 +329,7 @@ Decision：三个仓库统一采用“上游同步镜像 → 独立审查 → �
 
 Scope（初始文档收口）：只修改文档并在个人Fork创建柏宝库`personal/stable`分支；未修改Runtime源码、未运行构建或发布。\n\nFollow-up（2026-11-12）：用户提供NAS执行结果，确认柏宝库已成功切换到个人Fork的`personal/stable`，并设置`origin`为个人仓库、`upstream`为原作者；工作区clean，保留原始Runtime备份分支。本次Git跟踪整理不改变Runtime，不需要重启。随后将当前NAS分支、备份分支和远端关系同步记录到Production Baseline与柏宝库Runbook。
 
-## 2026-11-12 — Vertex 协议契约对齐、封闭枚举诊断、凭据边界与流式/重放收尾（Stage Candidate）
+## 2026-11-12 — Vertex 协议契约对齐、封闭枚举诊断、凭据边界与流式/重放收尾（Merged to release）
 
 Trigger（符合冻结后重开门槛：安全凭据边界 + P1 请求 400 + 流式/历史重放数据正确性缺陷）：
 
@@ -341,4 +343,4 @@ Capability Ownership Review & Security Boundary：
 - 第三方插件减法：ST Core原生已完整支持`gemini-4-argon`及流式/推理契约，无需保留第三方`Quirlune/Vertex-Custom-Models`扩展（建议在ST扩展管理器卸载以避免DOM选择器争用）；`Shalistera@78a22e87`跨渠道自定义模型继续保持Intentional Omission。
 - 防封号与安全边界：维持100%官方Vertex端点与标准头，每次用户操作仅单次上游派发（零自动重试）；聊天与多媒体共用单一官方Vertex域名白名单解析；错误诊断采用16 KiB / 5s双有界读取与封闭枚举白名单（`google.rpc.Code`、`ErrorInfo.reason`、协议层安全阻断枚举及受根约束的camelCase/snake_case Schema路径），绝不读取或回显上游`error.message`、`description`、URL、凭据或Prompt；结合`usageMetadata.thoughtsTokenCount`识别未开启思考展示时思考耗尽`maxOutputTokens`的场景；`#vertexai_runtime`等待秒表仅在等待阶段运行，进入接收或任意终态/异常/取消立即销毁，零残留定时器、零额外网络请求，并在终态展示隐式缓存命中率与Token分项明细。
 
-Scope & Deployment Status：变更位于独立候选分支`stage/vertex-protocol-and-ux`，已通过`lint`、`test:vertex`、`test:reliability`、`test:unit`、`release.node.mjs`、Python治理单测、真实Chromium E2E（`VertexNative.e2e.js` + `CoreStreaming.e2e.js`）、柏宝箱`test:personal-stable`与柏宝库Bridge核验。尚未合入`release`，未更新`personal-release.json`或`PRODUCTION_BASELINE.json`，未构建GHCR镜像，未操作NAS生产环境。
+Scope & Deployment Status：已在`stage/vertex-protocol-and-ux`完成内部diff审查与外部安全/协议复核修复，全部检查通过（`lint`、`test:vertex` 40/40、`test:reliability` 17/17、`test:unit` 412/412、`release.node.mjs` 13/13、Python治理单测 4/4、真实Chromium E2E `VertexNative.e2e.js` + `CoreStreaming.e2e.js` 33/33、柏宝箱`test:personal-stable` 6/6、柏宝库5个Bridge锚点幂等核验 5/5），并基于`fdfad0703ad8bd08ba0d5cc90d0c6f15abecfc5d`快进合入个人`release`分支（阶段Runtime提交链：`fbdcfae4ef39e4bd624d81a01c35421d407e017e` → `206fc2476d76dadc2b24a6214d9dcea607265c8b` → `e49a694083cc46dbf883f13eab664076c139011f`）。按阶段规划，未修改`personal-release.json`（保持在已发布版本`v1.19.0-personal.1` / `090cbba6d40e5d117ab41a9e6deb20b40e2dc336`，避免提前触发`personal-release.yml`自动构建GHCR镜像；在此期间`scripts/personal/release.mjs check`会按设计提示相对`090cbba6`的Runtime差异，直至下一正式版本发版时同步更新`personal-release.json`）；已在`PRODUCTION_BASELINE.json`的`release_branch_milestone`与`repository_heads`登记仓库阶段基线，不改动`current_production`；未构建Docker镜像、未打Tag、未操作NAS生产环境，待后续性能优化与修复阶段完成后统一构建镜像并进行实机Google/NAS验收。

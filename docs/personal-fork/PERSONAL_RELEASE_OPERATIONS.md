@@ -10,7 +10,7 @@
 ghcr.io/surgexw0508/sillytavern-personal@sha256:22973f7169fa694a0894b054e2b754ccf0ea881703d32a011e473c79c87ac740
 ```
 
-实际Image ID为`sha256:dfb4f08735296b0b7610e9936cbce707af8d0021ac6d4eaafadc93c074b09e01`。Release source是`1af2180585e5bbe49159bc8884d5c890641f13c3`，Runtime仍是`090cbba6d40e5d117ab41a9e6deb20b40e2dc336`；后续文档HEAD不是新的镜像source。
+实际Image ID为`sha256:dfb4f08735296b0b7610e9936cbce707af8d0021ac6d4eaafadc93c074b09e01`。Release source是`1af2180585e5bbe49159bc8884d5c890641f13c3`，线上Runtime仍是`090cbba6d40e5d117ab41a9e6deb20b40e2dc336`；后续合入`release`分支的文档提交或暂缓发版的阶段性Runtime里程碑（如2026-11-12合入的Vertex收尾Runtime `e49a694083cc46dbf883f13eab664076c139011f`）在未执行正式Personal Release构建与NAS切换前，均不改变当前线上镜像source或实际运行代码。
 
 2026-11-12再次核验：容器状态为`running`、RestartCount为0；Compose 标签确认项目名为`sillytavern`，WorkingDir为`/vol3/1000/SillyTavern`，配置文件为`/vol3/1000/SillyTavern/docker-compose.yml`。挂载仍将宿主机的`config`、`data`、`plugins`、`extensions`分别映射到容器对应目录；视频目录以只读方式挂载。飞牛 Docker 已正式管理该 Compose 项目，无需迁移管理方式。
 
@@ -22,7 +22,7 @@ NAS Tools实际为`personal/stable@2f6a9c54d2c906b4a0e44d20c12d0712552e393d`，o
 
 - `upstream/release`：纯官方release同步基线，当前`06bde939fb1e9c4c8d8641d810f0a916b5bce127`，不放个人策略。
 - `stage/*`：独立开发和验证。`release`：Personal正式稳定分支。
-- `personal-release.json`：审查过的版本、上游基线、Runtime SHA、插件pin和当时验收范围；发布授权后按既有流程使用。本轮没有修改该文件。
+- `personal-release.json`：审查过的版本、上游基线、Runtime SHA、插件pin和当时验收范围；修改并推送到`release`会触发`personal-release.yml`自动打Tag并构建推送GHCR镜像。阶段性合入`release`但暂不构建Docker镜像时，保持该文件固定在当前已发布版本（`v1.19.0-personal.1`），待统一发布下一正式版本时再更新。
 - Shalistera仅为参考，不自动同步。任何组件更新都要先核查另两个组件，具体流程以canonical文档为准。
 
 长期流程：**Review → Stage → CI → Release/Tag → GHCR → NAS Compose → Health/Smoke**。只有经过审查和CI的候选才合入release，通过既有Personal Release Workflow生成版本化制品；不因官方或柏宝有新提交直接升级生产，也不顺手更新伴随插件。
@@ -135,6 +135,9 @@ Runtime故障优先回到上一个已验证镜像，同时确认Tools/BaiBaoKu�
 
 基本部署验收完成不等于备份/恢复、安全和所有可选能力已验收。飞牛Compose GUI更新流程已确认；Backrest自动备份与恢复验证、真实生产数据恢复演练和安全评估仍未完成。临时资产保持保留，Production Baseline的cleanup_allowed继续为false；本轮不授权删除任何文件、镜像或备份。
 
-## 本轮文档状态
+## 当前仓库与发布状态
 
-2026-11-12本次更新仅修订维护与部署文档：确认飞牛Compose图形化更新入口、记录三仓库当前分支/安装方式，并建立柏宝箱与柏宝库的个人维护Runbook。未修改Runtime、未运行CI/构建、未创建Tag/Release、未推送GHCR镜像、未更新NAS或重启容器。当前柏宝库NAS Git分支整理仍是独立待授权事项。
+2026-11-12维护与阶段合入记录：
+
+- 部署流程与分支治理：已确认飞牛Compose图形化更新入口、建立柏宝箱与柏宝库个人维护Runbook，并完成柏宝库NAS Git跟踪关系整理（`personal/stable@4814830f`，跟踪`origin/personal/stable`）。
+- Vertex阶段性收尾合入`release`：已将经过内部diff审查与外部安全/协议复核的Vertex收尾分支`stage/vertex-protocol-and-ux`快进合入`release`（阶段Runtime基线`e49a694083cc46dbf883f13eab664076c139011f`）。按阶段规划暂不修改`personal-release.json`、不创建Tag/GitHub Release、不触发GHCR Docker构建、不更新NAS或重启容器；待后续性能优化与修复阶段完成后统一发版与实机验证。
