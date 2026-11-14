@@ -316,10 +316,36 @@
     "status": "merged_to_release_awaiting_vertex_gemini4_models_intake_before_unified_personal_release",
     "note": "Fast-forward merged into SillyTavern:release with stage/core-perf-intake deleted after verification; ST-BaiBai-Tools and baibaoku required zero changes; personal-release.json, GHCR images, and NAS remain untouched."
   },
+  "vertex_gemini4_models_candidate": {
+    "recorded_at": "2026-11-14",
+    "sillytavern_candidate_branch": "stage/vertex-gemini4-models",
+    "sillytavern_base_release_commit": "8781e17923ef399682c5af89a39174417fbf6e4c",
+    "sillytavern_runtime_commit": "dd3d522b73848dad7cba64625750c68b2ceb17d5",
+    "sillytavern_runtime_commits": [
+      "dd3d522b73848dad7cba64625750c68b2ceb17d5"
+    ],
+    "tools_branch": "personal/stable",
+    "tools_head_commit": "595854eeaf36fc05ecd380639d3013048693c768",
+    "tools_runtime_commit": "1e8d5a818e19c7deafee42808aa39033c25170a1",
+    "baibaoku_branch": "personal/stable",
+    "baibaoku_head_commit": "2ba8864fa6b16cb425c05b6c66b4fefbfb5fd64c",
+    "baibaoku_runtime_commit": "e9d95265c77187446177e839a2b97975ebb2aa0d",
+    "scope": "vertex_gemini4_carbon_and_hydrogen_frozen_capability_profiles_hydrogen_xhigh_and_flex_and_64k_nonstream_v1_cap_conservative_unknown_gemini4_fallback_and_unified_penalty_seed_ignored_parameter_policy",
+    "merged_to_release_or_personal_stable": false,
+    "personal_release_json_updated": false,
+    "ghcr_image_built": false,
+    "nas_deployed": false,
+    "real_google_or_nas_verified": false,
+    "status": "candidate_verified_awaiting_user_review_for_release_merge",
+    "note": "Verified on stage/vertex-gemini4-models; SillyTavern:release, ST-BaiBai-Tools:personal/stable, baibaoku:personal/stable, personal-release.json, GHCR images, and NAS remain untouched pending user review."
+  },
   "repository_heads": {
     "verified_at": "2026-11-14",
     "sillytavern_upstream_release": "06bde939fb1e9c4c8d8641d810f0a916b5bce127",
+    "sillytavern_release_head_commit": "8781e17923ef399682c5af89a39174417fbf6e4c",
     "sillytavern_release_runtime_commit": "28797486d97375ddefa49f978390c88f1eb083fd",
+    "sillytavern_candidate_branch": "stage/vertex-gemini4-models",
+    "sillytavern_candidate_runtime_commit": "dd3d522b73848dad7cba64625750c68b2ceb17d5",
     "sillytavern_release_delta_from_production": "vertex_perf_ownership_baibai_1_2_0_pending_closeout_and_core_perf_intake_milestones_merged_to_release_pending_unified_ghcr_release",
     "tools_main": "d828d6812994414cef24be9e5f995a264e9fe370",
     "tools_personal_stable": "595854eeaf36fc05ecd380639d3013048693c768",

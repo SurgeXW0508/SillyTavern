@@ -10,7 +10,7 @@ Canonical compatibility document。当前正式制品为[v1.19.0-personal.1](htt
 
 正式镜像仅确认启动、Health、Vertex普通RP正文生成、刷新后聊天记录保留。Candidate的多轮、Stop、Regenerate等历史结果单独保留，不自动算作正式镜像已验证。飞牛GUI方案与仅局域网/Tailscale自用访问边界已确认结案，Backrest不再挂Pending，旧回滚镜像与临时目录保留边界见Operations。
 
-2026-11-12至2026-11-14阶段性仓库状态：Vertex协议契约、封闭枚举诊断、多媒体共享凭据域名守卫与流式/重放收尾（Runtime `e49a6940`）、三仓库世界书性能优化与能力归属收敛（Runtime `e92f8dc4` / 柏宝箱 `3314098e` / 柏宝库 `61aae569`）、柏宝箱 `1.2.0`（内置柏宝砚）+ 柏宝库 `0.7.4` 同步与三项代码层 Pending Ownership 全量收口（阶段 Runtime `5c02da4f`、柏宝箱 `personal/stable@595854eeaf36fc05ecd380639d3013048693c768` / Runtime `1e8d5a818e19c7deafee42808aa39033c25170a1`、柏宝库 `personal/stable@2ba8864fa6b16cb425c05b6c66b4fefbfb5fd64c` / Runtime `e9d95265c77187446177e839a2b97975ebb2aa0d`），以及用户授权的 Shalistera Core 性能二次吸收（ST `release` 阶段 Runtime `28797486d97375ddefa49f978390c88f1eb083fd`）已全部快进合入各自稳定主路并清理临时候选分支；暂未修改 `personal-release.json`、暂未构建新 GHCR 镜像或更新 NAS，线上生产仍为 `v1.19.0-personal.1`（ST Runtime `090cbba6d40e5d117ab41a9e6deb20b40e2dc336`、Tools `2f6a9c54`、BaiBaoKu `4814830f` / Runtime `b211a4e9`），待用户明确授权后统一发布正式镜像与实机切换。
+2026-11-12至2026-11-14阶段性仓库状态：Vertex协议契约、封闭枚举诊断、多媒体共享凭据域名守卫与流式/重放收尾（Runtime `e49a6940`）、三仓库世界书性能优化与能力归属收敛（Runtime `e92f8dc4` / 柏宝箱 `3314098e` / 柏宝库 `61aae569`）、柏宝箱 `1.2.0`（内置柏宝砚）+ 柏宝库 `0.7.4` 同步与三项代码层 Pending Ownership 全量收口（阶段 Runtime `5c02da4f`、柏宝箱 `personal/stable@595854eeaf36fc05ecd380639d3013048693c768` / Runtime `1e8d5a818e19c7deafee42808aa39033c25170a1`、柏宝库 `personal/stable@2ba8864fa6b16cb425c05b6c66b4fefbfb5fd64c` / Runtime `e9d95265c77187446177e839a2b97975ebb2aa0d`），以及用户授权的 Shalistera Core 性能二次吸收（ST `release@8781e17923ef399682c5af89a39174417fbf6e4c` 阶段 Runtime `28797486d97375ddefa49f978390c88f1eb083fd`）已全部快进合入各自稳定主路并清理已合入临时分支；当前候选分支 `stage/vertex-gemini4-models`（Runtime `dd3d522b73848dad7cba64625750c68b2ceb17d5`）完成 Vertex `gemini-4-carbon` / `gemini-4-hydrogen` 型号能力表接入与采样/惩罚/`seed` 忽略提示策略对齐，待用户审阅确认合入 `release`。暂未修改 `personal-release.json`、暂未构建新 GHCR 镜像或更新 NAS，线上生产仍为 `v1.19.0-personal.1`（ST Runtime `090cbba6d40e5d117ab41a9e6deb20b40e2dc336`、Tools `2f6a9c54`、BaiBaoKu `4814830f` / Runtime `b211a4e9`），待用户明确授权后统一发布正式镜像与实机切换。
 
 Decision Log、SH取舍索引及C-E0交接是对应阶段的历史证据。已发布Release资产中的compatibility是发布时快照，不修改其内容来补填后续实机结果；当前生产事实更新在Production Baseline。
 
@@ -50,7 +50,7 @@ Decision Log、SH取舍索引及C-E0交接是对应阶段的历史证据。已�
 
 | Capability | Owner | 其他实现 | Policy |
 | --- | --- | --- | --- |
-| Vertex请求协议、认证、传输 | ST | Shalistera仅来源参考 | ST only；不整体合并参考分支；聊天与多媒体共用官方Google域名白名单；封闭枚举RPC诊断与等待/缓存状态栏 |
+| Vertex请求协议、认证、传输 | ST | Shalistera仅来源参考 | ST only；不整体合并参考分支；聊天与多媒体共用官方Google域名白名单；封闭枚举RPC诊断与等待/缓存状态栏；Gemini 4冻结型号能力表（`argon`/`carbon`/`hydrogen` + 未知文本型号保守回退、排除`-image`）与采样/惩罚/`seed`剥离提示 vs 结构性冲突400报错分级 |
 | Thinking / Reasoning / Thought Signature | ST | 旧插件适配已撤回 | 按原始Part保存；编辑使对应正文重放失效；保留角色名前缀为独立无签名Part |
 | Tool Calling原生语义与历史 | ST | 柏宝后台执行不采用 | ST调用工具；保留id/name/参数/顺序/有效调用签名；functionCall仅经成对tool_invocations载体消息重放 |
 | Generate、Continue、Swipe、Regenerate | ST | Save Generate关闭 | 同一原生请求链 |
@@ -84,7 +84,7 @@ Decision Log、SH取舍索引及C-E0交接是对应阶段的历史证据。已�
 
 | Component | Source / branch | 精确验证基线 |
 | --- | --- | --- |
-| Personal ST运行代码 | `SurgeXW0508/SillyTavern:release` | NAS正式生产仍为`090cbba6d40e5d117ab41a9e6deb20b40e2dc336`（`v1.19.0-personal.1`）；仓库`release`已先后快进合入三项Pending根因修复、三轮外审加固与终论保存锁修复，以及用户授权的Shalistera Core性能二次吸收（阶段Runtime `28797486d97375ddefa49f978390c88f1eb083fd`，暂未修改`personal-release.json`或构建新GHCR镜像） |
+| Personal ST运行代码 | `SurgeXW0508/SillyTavern:release` | NAS正式生产仍为`090cbba6d40e5d117ab41a9e6deb20b40e2dc336`（`v1.19.0-personal.1`）；仓库`release`（`8781e17923ef399682c5af89a39174417fbf6e4c`）已先后快进合入三项Pending根因修复、三轮外审加固与终论保存锁修复，以及用户授权的Shalistera Core性能二次吸收（阶段Runtime `28797486d97375ddefa49f978390c88f1eb083fd`）；候选分支`stage/vertex-gemini4-models`提交Vertex `gemini-4-carbon`/`gemini-4-hydrogen`接入与参数忽略策略对齐（Runtime `dd3d522b73848dad7cba64625750c68b2ceb17d5`，暂未修改`personal-release.json`或构建新GHCR镜像） |
 | 柏宝箱上游同步基线 | `baibai-git/ST-BaiBai-Tools:main` → `SurgeXW0508/ST-BaiBai-Tools:main` | 镜像`main`已快进同步至`d828d6812994414cef24be9e5f995a264e9fe370`（`1.2.0`） |
 | 柏宝箱唯一个人部署分支 | `SurgeXW0508/ST-BaiBai-Tools:personal/stable` | NAS当前仍为`2f6a9c54d2c906b4a0e44d20c12d0712552e393d`（跟踪`origin/personal/stable`）；仓库`personal/stable`已快进合入至`595854eeaf36fc05ecd380639d3013048693c768`（Runtime/`dist`提交`1e8d5a818e19c7deafee42808aa39033c25170a1`，完成`1.2.0`内置柏宝砚多轮外审加固、闭包绑定`fetchPipeline`外层包装安全与终论审查修复，待ST新正式镜像发布后与三库同步部署） |
 | 柏宝库唯一个人部署分支 | `SurgeXW0508/baibaoku:personal/stable` | NAS当前Git HEAD仍为`4814830f2d161dfff89e75370effa31d669586d9`（Runtime基线`b211a4e97fdaec24dc8b90c85ddc198fac9ac200` / 0.7.3，跟踪`origin/personal/stable`，原作者为`upstream`）；镜像`main`已快进同步至`d915bc8f0036fb308f02b9a9e52ae880f05d4fe4`（`0.7.4`），仓库`personal/stable`已快进合入至`2ba8864fa6b16cb425c05b6c66b4fefbfb5fd64c`（Runtime提交`e9d95265c77187446177e839a2b97975ebb2aa0d`，完成`0.7.4`同步、快速保存端到端派发/落盘保序、旧V2角色卡兼容及快表路径包含/尾行原生契约对齐，待ST新正式镜像发布后与三库同步部署） |
@@ -464,3 +464,22 @@ Verification & Measured Timing Evidence：
   - **C1 闭合文件夹 `Set` 预索引**（3,000 张角色卡 × 20 个闭合文件夹，Node 基准）：单次 `0.926ms → 0.176ms`（**-81.0%**，5.3×；按单次 `getCharacters()` 触发 ~25 次过滤折算约 `23.2ms → 4.4ms`）。
   - **C2 千层聊天角色标签 DOM 查询**（1,000 层 `#chat > .mes` 目标过滤，Chromium 实测）：`47.7ms → 0.3ms`（**-99.4%**，159×）。
 - **Merged Milestone Status**：上述代码与修正后的文档已按用户授权快进合入 `SillyTavern:release`（阶段 Runtime `28797486d97375ddefa49f978390c88f1eb083fd`）并在核验 `0 ahead` 后清理临时分支 `stage/core-perf-intake`；`personal-release.json`、`PRODUCTION_BASELINE.json` 的 `current_production`、GHCR 镜像与 NAS 生产环境均保持未动。
+
+### 2026-11-14 Vertex `gemini-4-carbon` / `gemini-4-hydrogen` 接入与参数忽略策略对齐（候选分支 `stage/vertex-gemini4-models`）
+
+Capability Ownership Review & Boundary Verification：
+
+- **单一 Owner 边界**：Vertex 原生协议、型号能力校验与前端下拉选项归属 ST Core 唯一拥有；柏宝箱（`ST-BaiBai-Tools`）与柏宝库（`baibaoku`）源码对 `model_vertexai_select`、`vertexai_*` 与 Gemini 4 零耦合，维持 **0 改动**；AI Studio（MakerSuite）链路的 `chat-completions.js` / `prompt-converters.js` 上游正则保持不动；前端 `openai.js` 因 `VERTEXAI` 不在 `reasoningEffortSources` 内（原生将 `'max'` 直传后端）维持 **0 改动**，完全避开柏宝库 `openai.js` 补丁区域。
+- **架构收敛（冻结型号能力表替代散落 `if (argon)`）**：在 [`src/endpoints/backends/vertex-protocol.js`](../../src/endpoints/backends/vertex-protocol.js) 以单一冻结能力表 `GEMINI4_TEXT_PROFILES` + `gemini4TextProfile(model)` 收口全部 Gemini 4 文本型号规则（排除 `-image` 图像变体；未登记的 `gemini-4-*` 文本型号回退至最保守的 `CONSERVATIVE_GEMINI4_PROFILE`，不放行未知能力）：
+  - **家族共性**（`argon` / `carbon` / `hydrogen` 及未知文本变体一致）：接入 `isNoSamplingModel` 与 `rejectsPrefillModel`、仅允许 `global`/`us`/`eu` 区域、默认 `v1beta1` `continuation_token` 自动续传（`autoContinue`）、`min → LOW`、拒绝 `thinkingBudget` 与 `request_images`。
+  - **型号差异**（仅在表内声明）：`flex`（`hydrogen: true`，`argon`/`carbon`/保守回退为 `false`）；`v1SegmentCap`（`hydrogen` 流式/非流式均为 `65,536`，其余流式 `65,536` / 非流式 `32,768`）；`maxThinkingLevel`（`hydrogen` 为 `'XHIGH'`，其余为 `'HIGH'`，允许档位由该字段直接推导）。
+- **参数忽略 vs 显式报错体验对齐（含 `4A` 有意行为变更）**：
+  - 针对前端共享预设每次请求必带的 `frequency_penalty`、`presence_penalty` 以及官方未承诺支持的 `seed >= 0`，将 Gemini 4 文本家族（含既有 `gemini-4-argon`）统一从 `400` 硬报错改为**后端自动剥离并按固定顺序写入 `ignoredParameters`（`temperature, top_p, top_k, frequency_penalty, presence_penalty, seed`）**，在 `#vertexai_runtime` 状态栏显式提示 `模型忽略：…`，消除跨预设切换时无谓打断生成/Swipe/Regenerate 的摩擦。
+  - 凡静默处理会改变语义、计费或数据边界的冲突（`n > 1`、`logprobs`/`logit_bias`、非法区域、`4A`/`4C` 选 `Flex`、`v1` 超单段上限、非 `Continue` 助手预填、`request_images`、`thinkingBudget`）继续维持 `VERTEX_CONFIG` `400` 显式报错。
+- **面板选项与文案**（[`public/index.html`](../../public/index.html)）：在 `#model_vertexai_select` 的 `Gemini 4` 分组按新型号优先顺序提供 `gemini-4-hydrogen`、`gemini-4-carbon`、`gemini-4-argon`（默认型号不变），并将四处写死 `Argon` 的提示更新为准确的 Gemini 4 家族说明。
+
+Candidate Implementation & Verification（`stage/vertex-gemini4-models`，基于 `release@8781e17923ef399682c5af89a39174417fbf6e4c`）：
+
+- Runtime & 单测提交：`dd3d522b73848dad7cba64625750c68b2ceb17d5` — `feat(vertex): add Gemini 4 Carbon/Hydrogen via per-model capability profiles`。
+- 全套验证结果：根目录 `npm run lint` 与 `tests` `npm run lint` 0 错误；`tests` `npm run test:unit` **24/24 套件（437 项）**全绿；`npm run test:vertex` **41/41**（含 `4A`/`4C`/`4H`/未知 `gemini-4-foo` 保守回退/`gemini-4-xxx-image` 排除/DOM 选项顺序表驱动单测）、`npm run test:reliability` **17/17**、`release.node.mjs` **13/13**、`test_stack.py` **4/4** 全绿；Playwright `VertexNative.e2e.js` + `ReasoningLifecycle.e2e.js` **22/22** 全绿；隔离三库 Chromium 联跑实测 `gemini-4-hydrogen`（`Maximum → XHIGH`、`Flex` 放行）与 `gemini-4-carbon`（`Maximum → HIGH`）真实前端发包与状态栏 `模型忽略` 提示符合预期，且 `pageerror = 0`、`http500s = 0`、Save Generate 请求数 `= 0`。
+- **Candidate Status**：当前提交位于候选分支 `stage/vertex-gemini4-models`；`release` 分支、`personal-release.json`、`PRODUCTION_BASELINE.json` 的 `current_production`、GHCR 镜像与 NAS 生产环境均保持未动，待用户审阅授权后再快进合入 `release`。
