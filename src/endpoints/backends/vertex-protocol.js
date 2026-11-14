@@ -22,6 +22,7 @@ const CONSERVATIVE_GEMINI4_PROFILE = Object.freeze({
     flex: false,
     v1SegmentCap: Object.freeze({ stream: 65536, nonStream: 32768 }),
     maxThinkingLevel: 'HIGH',
+    prefixMismatchBehavior: 'DROP',
 });
 const GEMINI4_TEXT_PROFILES = Object.freeze({
     argon: Object.freeze({
@@ -29,18 +30,21 @@ const GEMINI4_TEXT_PROFILES = Object.freeze({
         flex: false,
         v1SegmentCap: Object.freeze({ stream: 65536, nonStream: 32768 }),
         maxThinkingLevel: 'HIGH',
+        prefixMismatchBehavior: 'DROP',
     }),
     carbon: Object.freeze({
         label: 'Carbon',
         flex: false,
         v1SegmentCap: Object.freeze({ stream: 65536, nonStream: 32768 }),
         maxThinkingLevel: 'HIGH',
+        prefixMismatchBehavior: 'DROP',
     }),
     hydrogen: Object.freeze({
         label: 'Hydrogen',
         flex: true,
         v1SegmentCap: Object.freeze({ stream: 65536, nonStream: 65536 }),
         maxThinkingLevel: 'XHIGH',
+        prefixMismatchBehavior: 'DROP',
     }),
 });
 export function gemini4TextProfile(model) {
@@ -122,7 +126,7 @@ export function vertexOptions(input) {
         if (max > v1Cap) fail(`${gemini4.label} 超长续传需要 v1beta1，请将 API 版本设为自动或 v1beta1。`);
     }
     return { model, gemini4, omitSampling, tier, capacity, max, timeoutMs: timeout * 1000, autoContinue,
-        apiVersion: version === 'auto' ? (autoContinue ? 'v1beta1' : 'v1') : version,
+        apiVersion: version === 'auto' ? (gemini4 ? 'v1beta1' : 'v1') : version,
         streamArguments: modern(model) && !/^gemini-3\.1-flash-lite/.test(model) && input.stream === true && input.vertexai_argument_streaming !== false,
         ignoredParameters,
         unwrapContent: input.vertexai_unwrap_content === true && input.tools?.length === 1 && input.tools[0]?.function?.name === 'actual_content' };
@@ -156,6 +160,9 @@ export function buildVertexRequest(request, options = vertexOptions(request.body
     if (schema) { config.responseSchema = schema; config.responseMimeType ||= 'application/json'; }
     if (modern(options.model)) {
         config.thinkingConfig = { includeThoughts: !!input.include_reasoning };
+        if (options.gemini4?.prefixMismatchBehavior) {
+            config.thinkingConfig.prefixMismatchBehavior = options.gemini4.prefixMismatchBehavior;
+        }
         const effort = input.reasoning_effort;
         if (effort && effort !== 'auto') {
             const level = resolveThinkingLevel(options.model, effort);
@@ -212,6 +219,9 @@ export function buildVertexRequest(request, options = vertexOptions(request.body
             : ['LOW', 'MEDIUM', 'HIGH'];
         if (thinking?.thinkingLevel && !allowedLevels.includes(thinking.thinkingLevel)) {
             fail(`${options.gemini4.label} thinkingLevel 只支持 ${allowedLevels.join('、')}。`);
+        }
+        if (thinking?.prefixMismatchBehavior && !['DROP', 'ERROR'].includes(thinking.prefixMismatchBehavior)) {
+            fail(`${options.gemini4.label} prefixMismatchBehavior 只支持 DROP、ERROR。`);
         }
     }
     if (options.omitSampling) {

@@ -597,7 +597,7 @@ export function convertGooglePrompt(messages, model, useSysPrompt, names, { nati
         // Inject stored thought signatures, or fall back to bypass magic for Gemini 3
         if (/gemini-[34]/.test(model) || /gemini-2\.5/.test(model)) {
             const skipSignatureMagic = 'skip_thought_signature_validator';
-            const textSignature = message.signature;
+            const textSignature = nativeVertex && storedVertex ? null : message.signature;
 
             parts.forEach((part) => {
                 if (nativeParts) return;

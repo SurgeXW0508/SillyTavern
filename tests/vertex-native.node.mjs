@@ -704,6 +704,13 @@ test('Gemini 4 text capability profiles cover Argon, Carbon, Hydrogen, conservat
             assert.equal(built.generationConfig[key], undefined);
         }
         assert.equal(built.generationConfig.thinkingConfig.thinkingLevel, 'LOW');
+        assert.equal(built.generationConfig.thinkingConfig.prefixMismatchBehavior, 'DROP');
+
+        // Auto API version stays on v1beta1 for Gemini 4 even when autoContinue is unchecked; explicit v1 is still honored within single-segment caps.
+        const autoNoContinue = vertexOptions({ ...base, model: c.model, max_tokens: 4096, vertexai_auto_continue: false });
+        assert.equal(autoNoContinue.autoContinue, false);
+        assert.equal(autoNoContinue.apiVersion, 'v1beta1');
+        assert.equal(vertexOptions({ ...base, model: c.model, max_tokens: 4096, vertexai_api_version: 'v1' }).apiVersion, 'v1');
 
         // Empty/negative seed values do not pollute ignoredParameters.
         for (const noSeed of [undefined, null, '', -1]) {
@@ -719,6 +726,7 @@ test('Gemini 4 text capability profiles cover Argon, Carbon, Hydrogen, conservat
         // Maximum reasoning effort maps to XHIGH on Hydrogen and HIGH on Argon/Carbon/unknown.
         const maxBuilt = buildVertexRequest(context({ model: c.model, reasoning_effort: 'max' }));
         assert.equal(maxBuilt.generationConfig.thinkingConfig.thinkingLevel, c.maxLevel);
+        assert.equal(maxBuilt.generationConfig.thinkingConfig.prefixMismatchBehavior, 'DROP');
 
         // Flex PayGo: allowed on global for Hydrogen, rejected on Argon/Carbon/unknown; non-global Flex always rejected.
         if (c.flex) {
@@ -745,6 +753,7 @@ test('Gemini 4 text capability profiles cover Argon, Carbon, Hydrogen, conservat
     const imageBuilt = buildVertexRequest(context({ model: 'gemini-4-xxx-image', max_tokens: 4096, request_images: true, seed: 9 }));
     assert.deepEqual(imageBuilt.generationConfig.responseModalities, ['TEXT', 'IMAGE']);
     assert.equal(imageBuilt.generationConfig.seed, 9);
+    assert.equal(imageBuilt.generationConfig.thinkingConfig.prefixMismatchBehavior, undefined);
 
     // index.html exposes Hydrogen, Carbon, and Argon under the Vertex Gemini 4 optgroup.
     const html = readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
@@ -753,4 +762,151 @@ test('Gemini 4 text capability profiles cover Argon, Carbon, Hydrogen, conservat
     const gemini4Options = [...gemini4Group.matchAll(/<option value="([^"]+)">/g)].map(m => m[1]);
     assert.deepEqual(gemini4Options, ['gemini-4-hydrogen', 'gemini-4-carbon', 'gemini-4-argon']);
 });
+
+test('Gemini 4 replays unchanged turn signatures with prefixMismatchBehavior=DROP across prompt prefix mutations while stripping self-edited turns', async () => {
+    for (const model of ['gemini-4-argon', 'gemini-4-carbon', 'gemini-4-hydrogen', 'gemini-4-foo']) {
+        const signedTextParts = [
+            { thought: true, text: 'initial reasoning', thoughtSignature: `THOUGHT_SIG_${model}` },
+            { text: 'Unchanged assistant reply.', thoughtSignature: `TEXT_SIG_${model}` },
+        ];
+        const savedMsg = { name: 'Assistant', mes: 'Unchanged assistant reply.', is_user: false, extra: {} };
+        applyVertexMessageState(savedMsg, vertexResponseRecord(signedTextParts, model), { state: 'completed' });
+        const displayReplay = {
+            ...reusableVertexDisplayResponse(savedMsg, model),
+            promptText: savedMsg.mes,
+        };
+
+        // 1. System prompt & dynamic World Info prefix changes while the assistant turn itself is unchanged.
+        for (const [effort, includeReasoning] of [['auto', false], ['high', true]]) {
+            const mutatedPrefixReq = context({
+                model,
+                use_sysprompt: true,
+                reasoning_effort: effort,
+                include_reasoning: includeReasoning,
+                messages: [
+                    { role: 'system', content: 'Updated system prompt v2 + newly activated World Info lore' },
+                    { role: 'user', content: 'Edited earlier user turn after lore trigger' },
+                    {
+                        role: 'assistant',
+                        content: savedMsg.mes,
+                        signature: savedMsg.extra.reasoning_signature,
+                        vertex_response: structuredClone(displayReplay),
+                    },
+                    { role: 'user', content: 'Follow-up turn' },
+                ],
+            });
+            const built = buildVertexRequest(mutatedPrefixReq);
+            assert.match(built.systemInstruction.parts.map(p => p.text).join('\n'), /Updated system prompt v2/);
+            assert.equal(built.generationConfig.thinkingConfig.includeThoughts, includeReasoning);
+            assert.equal(built.generationConfig.thinkingConfig.prefixMismatchBehavior, 'DROP');
+            if (effort === 'auto') {
+                assert.equal(built.generationConfig.thinkingConfig.thinkingLevel, undefined);
+            } else {
+                assert.equal(built.generationConfig.thinkingConfig.thinkingLevel, 'HIGH');
+            }
+            const replayedModelTurns = built.contents.filter(c => c.role === 'model');
+            assert.equal(replayedModelTurns.length, 1);
+            assert.deepEqual(replayedModelTurns[0].parts, signedTextParts);
+        }
+
+        // 2. Context trimming / earlier history pruning + tool declaration updates + parallel functionCall replay + continuation hops.
+        const parallelToolParts = [
+            { thought: true, text: 'tool plan', thoughtSignature: `TOOL_PLAN_SIG_${model}` },
+            { functionCall: { name: 'lookup', id: 'call-1', args: { content: 'A' } }, thoughtSignature: `CALL_SIG_1_${model}` },
+            { functionCall: { name: 'lookup', id: 'call-2', args: { content: 'B' } } },
+        ];
+        const toolReplay = vertexResponseRecord(parallelToolParts, model);
+        const prunedAndExpandedMessages = [
+            { role: 'system', content: 'Compacted summary replacing pruned floors 0..20' },
+            { role: 'user', content: 'Run parallel lookup' },
+            {
+                role: 'assistant',
+                content: '',
+                vertex_response: toolReplay,
+                tool_calls: [
+                    { id: 'call-1', function: { name: 'lookup', arguments: '{"content":"A"}' }, signature: `CALL_SIG_1_${model}` },
+                    { id: 'call-2', function: { name: 'lookup', arguments: '{"content":"B"}' } },
+                ],
+            },
+            { role: 'tool', tool_call_id: 'call-1', content: 'result A' },
+            { role: 'tool', tool_call_id: 'call-2', content: 'result B' },
+            {
+                role: 'assistant',
+                content: savedMsg.mes,
+                signature: savedMsg.extra.reasoning_signature,
+                vertex_response: structuredClone(displayReplay),
+            },
+            { role: 'user', content: 'Next question with updated tools list' },
+        ];
+        const hopBodies = [];
+        const contResult = await createVertexGeneration({
+            resolveConnection,
+            fetchImpl: async (_url, init) => {
+                hopBodies.push(JSON.parse(init.body));
+                return upstream(hopBodies.length === 1
+                    ? [candidate([{ text: 'part-1 ' }], 'CONTINUATION', { continuationToken: `CONT_${model}` })]
+                    : [candidate([{ text: 'part-2', thoughtSignature: `NEW_SIG_${model}` }], 'STOP')]);
+            },
+        })(context({
+            model,
+            use_sysprompt: true,
+            tools: [tool('lookup'), tool('newly_added_tool')],
+            messages: prunedAndExpandedMessages,
+        }));
+        assert.equal(contResult.state, 'completed');
+        assert.equal(hopBodies.length, 2);
+        assert.equal(hopBodies[0].generationConfig.thinkingConfig.prefixMismatchBehavior, 'DROP');
+        assert.equal(hopBodies[1].generationConfig.thinkingConfig.prefixMismatchBehavior, 'DROP');
+        assert.equal(hopBodies[0].tools[0].functionDeclarations.length, 2);
+        const hopModelTurns = hopBodies[0].contents.filter(c => c.role === 'model');
+        assert.equal(hopModelTurns.length, 2);
+        assert.deepEqual(hopModelTurns[0].parts, parallelToolParts);
+        assert.equal(hopModelTurns[0].parts[2].thoughtSignature, undefined);
+        assert.deepEqual(hopModelTurns[1].parts, signedTextParts);
+
+        // 3. When the assistant turn's own text or role is altered (even if message.signature is also present), stale signatures are never re-attached.
+        const postProcessedBody = buildVertexRequest(context({
+            model,
+            messages: [
+                {
+                    role: 'assistant',
+                    content: 'Rewritten assistant text',
+                    signature: savedMsg.extra.reasoning_signature,
+                    vertex_response: structuredClone(displayReplay),
+                },
+                { role: 'user', content: 'Follow-up' },
+            ],
+        }));
+        assert.deepEqual(postProcessedBody.contents[0].parts, [{ text: 'Rewritten assistant text' }]);
+        assert.ok(!JSON.stringify(postProcessedBody.contents[0]).includes('SIG_'));
+
+        let singleRoleSent;
+        await run(async (_url, init) => {
+            singleRoleSent = JSON.parse(init.body);
+            return upstream([candidate([{ text: 'ok' }], 'STOP')]);
+        }, context({
+            model,
+            custom_prompt_post_processing: 'single',
+            messages: [
+                { role: 'user', content: 'First' },
+                {
+                    role: 'assistant',
+                    content: savedMsg.mes,
+                    signature: savedMsg.extra.reasoning_signature,
+                    vertex_response: structuredClone(displayReplay),
+                },
+                { role: 'user', content: 'Second' },
+            ],
+        }));
+        assert.equal(singleRoleSent.generationConfig.thinkingConfig.prefixMismatchBehavior, 'DROP');
+        assert.ok(!JSON.stringify(singleRoleSent.contents).includes('SIG_'));
+    }
+
+    // 4. Non-Gemini-4 models do not receive Gemini 4 prefixMismatchBehavior.
+    for (const nonG4 of ['gemini-3.8-flash', 'gemini-3.1-pro-preview', 'gemini-2.5-pro', 'gemini-4-xxx-image']) {
+        const built = buildVertexRequest(context({ model: nonG4, max_tokens: 4096 }));
+        assert.equal(built.generationConfig.thinkingConfig?.prefixMismatchBehavior, undefined);
+    }
+});
+
 
