@@ -10,7 +10,7 @@ setConfigFilePath(fileURLToPath(new URL('../default/config.yaml', import.meta.ur
 import { readFileSync, mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-const { vertexOptions, buildVertexRequest, readVertexSse, VertexFunctionStream, VERTEX_LIMITS, isNoSamplingModel, rejectsPrefillModel } = await import('../src/endpoints/backends/vertex-protocol.js');
+const { vertexOptions, buildVertexRequest, readVertexSse, VertexFunctionStream, VERTEX_LIMITS, gemini4TextProfile, isNoSamplingModel, rejectsPrefillModel } = await import('../src/endpoints/backends/vertex-protocol.js');
 const { createVertexGeneration, createVertexHandler, vertexResultFrame } = await import('../src/endpoints/backends/vertex-native.js');
 const { createVertexConnectionResolver, vertexHost, readVertexErrorEnvelope } = await import('../src/endpoints/backends/vertex-transport.js');
 const { getGoogleApiConfig, getVertexHost } = await import('../src/endpoints/google.js');
@@ -28,16 +28,21 @@ const run = (fetchImpl, input = context(), extra = {}) => createVertexGeneration
 const tool = name => ({ type: 'function', function: { name, parameters: { type: 'object', properties: { content: { type: 'string' } }, required: ['content'] } } });
 
 test('native protocol maps parameters without mutating settings; ignored/unsupported parameters are explicit', () => {
-    const input = context({ temperature: 0.2, top_k: 20, top_p: 0.8, tools: [tool('lookup')], tool_choice: 'required' });
+    const input = context({ temperature: 0.2, top_k: 20, top_p: 0.8, tools: [tool('lookup')], tool_choice: 'required', seed: -1 });
     const original = structuredClone(input);
     const options = vertexOptions(input.body), body = buildVertexRequest(input, options);
     assert.deepEqual(input, original);
     assert.deepEqual(options.ignoredParameters, ['temperature', 'top_p', 'top_k']);
     assert.equal(body.generationConfig.temperature, undefined);
+    assert.equal(body.generationConfig.seed, undefined);
     assert.equal(body.generationConfig.thinkingConfig.thinkingLevel, 'LOW');
     assert.equal(body.toolConfig.functionCallingConfig.streamFunctionCallArguments, true);
     assert.equal(body.toolConfig.functionCallingConfig.mode, 'ANY');
-    for (const override of [{ n: 2 }, { logprobs: true }, { frequency_penalty: 0.5 }, { seed: 1 }, { vertexai_region: 'us-central1' }, { vertexai_api_version: 'v1' }]) assert.throws(() => vertexOptions({ ...base, ...override }));
+    const strippedReq = context({ temperature: 0.7, top_p: 0.9, top_k: 40, frequency_penalty: 0.5, presence_penalty: -0.25, seed: 1 });
+    const strippedOpts = vertexOptions(strippedReq.body), strippedBody = buildVertexRequest(strippedReq, strippedOpts);
+    assert.deepEqual(strippedOpts.ignoredParameters, ['temperature', 'top_p', 'top_k', 'frequency_penalty', 'presence_penalty', 'seed']);
+    for (const key of ['temperature', 'topP', 'topK', 'frequencyPenalty', 'presencePenalty', 'seed']) assert.equal(strippedBody.generationConfig[key], undefined);
+    for (const override of [{ n: 2 }, { logprobs: true }, { vertexai_region: 'us-central1' }, { vertexai_api_version: 'v1' }]) assert.throws(() => vertexOptions({ ...base, ...override }));
     assert.throws(() => buildVertexRequest(context({ tools: [{ type: 'future_unsupported_tool' }] })), /Unsupported/);
     assert.throws(() => buildVertexRequest(context({ tools: [tool('lookup')], tool_choice: { type: 'function', function: { name: 'missing' } } })), /tool_choice/);
     assert.equal(vertexOptions({ ...base, model: 'gemini-3.1-flash-lite' }).streamArguments, false);
@@ -665,3 +670,87 @@ test('reusableVertexDisplayResponse strips unexecuted functionCall parts while p
         { text: 'Hello.', thoughtSignature: 'TEXT_SIG' },
     ]);
 });
+
+test('Gemini 4 text capability profiles cover Argon, Carbon, Hydrogen, conservative fallback, and image exclusion', () => {
+    const cases = [
+        { model: 'gemini-4-argon', label: 'Argon', flex: false, nonStreamV1Ok64k: false, maxLevel: 'HIGH' },
+        { model: 'gemini-4-carbon', label: 'Carbon', flex: false, nonStreamV1Ok64k: false, maxLevel: 'HIGH' },
+        { model: 'gemini-4-hydrogen', label: 'Hydrogen', flex: true, nonStreamV1Ok64k: true, maxLevel: 'XHIGH' },
+        { model: 'gemini-4-foo', label: 'Gemini 4', flex: false, nonStreamV1Ok64k: false, maxLevel: 'HIGH' },
+    ];
+    const prefillMessages = [{ role: 'user', content: 'hi' }, { role: 'assistant', content: 'trailing' }];
+
+    for (const c of cases) {
+        assert.equal(isNoSamplingModel(c.model), true);
+        assert.equal(rejectsPrefillModel(c.model), true);
+        assert.equal(gemini4TextProfile(c.model)?.label, c.label);
+
+        const req = context({
+            model: c.model,
+            temperature: 0.8,
+            top_p: 0.95,
+            top_k: 32,
+            frequency_penalty: 0.4,
+            presence_penalty: -0.2,
+            seed: 0,
+            reasoning_effort: 'min',
+        });
+        const opts = vertexOptions(req.body);
+        const built = buildVertexRequest(req, opts);
+        assert.equal(opts.autoContinue, true);
+        assert.equal(opts.apiVersion, 'v1beta1');
+        assert.deepEqual(opts.ignoredParameters, ['temperature', 'top_p', 'top_k', 'frequency_penalty', 'presence_penalty', 'seed']);
+        for (const key of ['temperature', 'topP', 'topK', 'frequencyPenalty', 'presencePenalty', 'seed']) {
+            assert.equal(built.generationConfig[key], undefined);
+        }
+        assert.equal(built.generationConfig.thinkingConfig.thinkingLevel, 'LOW');
+
+        // Empty/negative seed values do not pollute ignoredParameters.
+        for (const noSeed of [undefined, null, '', -1]) {
+            assert.deepEqual(vertexOptions({ ...base, model: c.model, seed: noSeed }).ignoredParameters, []);
+        }
+
+        // Prefill vs Continue, region, and text-only modality guards.
+        assert.throws(() => buildVertexRequest(context({ model: c.model, messages: prefillMessages })), /prefill/);
+        assert.equal(buildVertexRequest(context({ model: c.model, messages: prefillMessages, type: 'continue' })).contents.at(-1).role, 'user');
+        assert.throws(() => vertexOptions({ ...base, model: c.model, vertexai_region: 'us-central1' }), new RegExp(c.label));
+        assert.throws(() => buildVertexRequest(context({ model: c.model, request_images: true })), new RegExp(c.label));
+
+        // Maximum reasoning effort maps to XHIGH on Hydrogen and HIGH on Argon/Carbon/unknown.
+        const maxBuilt = buildVertexRequest(context({ model: c.model, reasoning_effort: 'max' }));
+        assert.equal(maxBuilt.generationConfig.thinkingConfig.thinkingLevel, c.maxLevel);
+
+        // Flex PayGo: allowed on global for Hydrogen, rejected on Argon/Carbon/unknown; non-global Flex always rejected.
+        if (c.flex) {
+            assert.equal(vertexOptions({ ...base, model: c.model, vertexai_service_tier: 'flex', vertexai_region: 'global' }).tier, 'flex');
+        } else {
+            assert.throws(() => vertexOptions({ ...base, model: c.model, vertexai_service_tier: 'flex', vertexai_region: 'global' }), /Flex/);
+        }
+        assert.throws(() => vertexOptions({ ...base, model: c.model, vertexai_service_tier: 'flex', vertexai_region: 'us' }), /Flex 需要 global/);
+
+        // Single-segment v1 non-streaming cap: 65536 passes on Hydrogen, throws on 32768-capped models; 65537 throws on all.
+        const nonStream64k = { ...base, model: c.model, stream: false, max_tokens: 65536, vertexai_api_version: 'v1' };
+        if (c.nonStreamV1Ok64k) {
+            assert.equal(vertexOptions(nonStream64k).max, 65536);
+        } else {
+            assert.throws(() => vertexOptions(nonStream64k), /v1beta1/);
+        }
+        assert.throws(() => vertexOptions({ ...nonStream64k, max_tokens: 65537 }), /v1beta1/);
+    }
+
+    // Image variant under gemini-4-* stays outside the text capability profile.
+    assert.equal(gemini4TextProfile('gemini-4-xxx-image'), null);
+    assert.equal(isNoSamplingModel('gemini-4-xxx-image'), false);
+    assert.equal(rejectsPrefillModel('gemini-4-xxx-image'), false);
+    const imageBuilt = buildVertexRequest(context({ model: 'gemini-4-xxx-image', max_tokens: 4096, request_images: true, seed: 9 }));
+    assert.deepEqual(imageBuilt.generationConfig.responseModalities, ['TEXT', 'IMAGE']);
+    assert.equal(imageBuilt.generationConfig.seed, 9);
+
+    // index.html exposes Hydrogen, Carbon, and Argon under the Vertex Gemini 4 optgroup.
+    const html = readFileSync(new URL('../public/index.html', import.meta.url), 'utf8');
+    const vertexSelect = html.match(/<select id="model_vertexai_select">[\s\S]*?<\/select>/)?.[0] || '';
+    const gemini4Group = vertexSelect.match(/<optgroup label="Gemini 4">[\s\S]*?<\/optgroup>/)?.[0] || '';
+    const gemini4Options = [...gemini4Group.matchAll(/<option value="([^"]+)">/g)].map(m => m[1]);
+    assert.deepEqual(gemini4Options, ['gemini-4-hydrogen', 'gemini-4-carbon', 'gemini-4-argon']);
+});
+

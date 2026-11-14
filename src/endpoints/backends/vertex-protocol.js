@@ -1,5 +1,5 @@
 // Adapted from Shalistera/SillyTavern 510fbb545f3c713c869e86fff106b3d1a830ce63.
-// Argon REST contract: https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/guides/gemini-4-argon
+// Gemini 4 (Argon / Carbon / Hydrogen) REST contracts: https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/guides/gemini-4-argon
 // Partial arguments: https://docs.cloud.google.com/gemini-enterprise-agent-platform/models/tools/function-calling
 import { StringDecoder } from 'node:string_decoder';
 import { convertGooglePrompt, getPromptNames, calculateGoogleBudgetTokens } from '../../prompt-converters.js';
@@ -16,12 +16,44 @@ export class VertexError extends Error {
 
 const fail = message => { throw new VertexError('VERTEX_CONFIG', message, 400); };
 const object = value => value && typeof value === 'object' && !Array.isArray(value);
-export const isArgon = model => /^gemini-4-argon(?:-|$)/i.test(model);
-const isGemini4 = model => /^gemini-4(?:[.-]|$)/i.test(model);
-const modern = model => /^gemini-[34](?:[.-]|$)/i.test(model);
+const isGemini4 = model => typeof model === 'string' && /^gemini-4(?:[.-]|$)/i.test(model);
+const CONSERVATIVE_GEMINI4_PROFILE = Object.freeze({
+    label: 'Gemini 4',
+    flex: false,
+    v1SegmentCap: Object.freeze({ stream: 65536, nonStream: 32768 }),
+    maxThinkingLevel: 'HIGH',
+});
+const GEMINI4_TEXT_PROFILES = Object.freeze({
+    argon: Object.freeze({
+        label: 'Argon',
+        flex: false,
+        v1SegmentCap: Object.freeze({ stream: 65536, nonStream: 32768 }),
+        maxThinkingLevel: 'HIGH',
+    }),
+    carbon: Object.freeze({
+        label: 'Carbon',
+        flex: false,
+        v1SegmentCap: Object.freeze({ stream: 65536, nonStream: 32768 }),
+        maxThinkingLevel: 'HIGH',
+    }),
+    hydrogen: Object.freeze({
+        label: 'Hydrogen',
+        flex: true,
+        v1SegmentCap: Object.freeze({ stream: 65536, nonStream: 65536 }),
+        maxThinkingLevel: 'XHIGH',
+    }),
+});
+export function gemini4TextProfile(model) {
+    if (!isGemini4(model) || /-image(?:-|$)/i.test(model)) return null;
+    const variant = /^gemini-4-([a-z0-9]+)(?:-|$)/i.exec(model)?.[1]?.toLowerCase();
+    return (variant && Object.hasOwn(GEMINI4_TEXT_PROFILES, variant))
+        ? GEMINI4_TEXT_PROFILES[variant]
+        : CONSERVATIVE_GEMINI4_PROFILE;
+}
+const modern = model => typeof model === 'string' && /^gemini-[34](?:[.-]|$)/i.test(model);
 const STRICT_GEMINI3_MODEL_RE = /gemini-3\.[678]-flash|gemini-3\.5-flash-lite/i;
-export const isNoSamplingModel = model => isArgon(model) || STRICT_GEMINI3_MODEL_RE.test(model);
-export const rejectsPrefillModel = model => isArgon(model) || STRICT_GEMINI3_MODEL_RE.test(model);
+export const isNoSamplingModel = model => Boolean(gemini4TextProfile(model)) || STRICT_GEMINI3_MODEL_RE.test(model);
+export const rejectsPrefillModel = model => Boolean(gemini4TextProfile(model)) || STRICT_GEMINI3_MODEL_RE.test(model);
 export const VERTEX_LIMITS = Object.freeze({ eventBytes: 32 * 1024 * 1024, responseBytes: 64 * 1024 * 1024, argumentBytes: 4 * 1024 * 1024, parts: 100000, calls: 1024 });
 export const ALLOWED_POLICY_REASONS = new Set([
     'SAFETY', 'PROHIBITED_CONTENT', 'BLOCKLIST', 'SPII', 'OTHER', 'MODEL_ARMOR', 'JAILBREAK',
@@ -45,7 +77,7 @@ function resolveThinkingLevel(model, effort) {
         low: 'LOW',
         medium: 'MEDIUM',
         high: 'HIGH',
-        max: 'HIGH',
+        max: gemini4TextProfile(model)?.maxThinkingLevel ?? 'HIGH',
     }[normalized];
 }
 
@@ -59,35 +91,37 @@ export function vertexOptions(input) {
     const model = String(input.model || '');
     if (!/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$/.test(model)) fail('Vertex 模型 ID 无效。');
     if (input.tools !== undefined && !Array.isArray(input.tools)) fail('tools 应为数组。');
-    const argon = isArgon(model);
+    const gemini4 = gemini4TextProfile(model);
     const omitSampling = isNoSamplingModel(model);
     if (input.n !== undefined && Number(input.n) !== 1) fail('Vertex Native only supports one candidate per request.');
     if (input.logprobs || input.top_logprobs || (input.logit_bias && Object.keys(input.logit_bias).length)) fail('Vertex Native does not support logprobs or logit bias.');
-    if (argon && (Number(input.frequency_penalty || 0) !== 0 || Number(input.presence_penalty || 0) !== 0)) fail('Argon does not support frequency or presence penalties.');
-    if (argon && Number(input.seed ?? -1) >= 0) fail('Argon seed control is not supported by this integration.');
+    const hasSeed = input.seed !== undefined && input.seed !== null && input.seed !== ''
+        && typeof input.seed !== 'boolean' && Number.isFinite(Number(input.seed)) && Number(input.seed) >= 0;
     const ignoredParameters = omitSampling ? [
         ...(input.temperature !== undefined ? ['temperature'] : []),
         ...(input.top_p !== undefined ? ['top_p'] : []),
         ...(Number(input.top_k) > 0 ? ['top_k'] : []),
-        ...(!argon && Number(input.frequency_penalty || 0) !== 0 ? ['frequency_penalty'] : []),
-        ...(!argon && Number(input.presence_penalty || 0) !== 0 ? ['presence_penalty'] : []),
+        ...(Number(input.frequency_penalty || 0) !== 0 ? ['frequency_penalty'] : []),
+        ...(Number(input.presence_penalty || 0) !== 0 ? ['presence_penalty'] : []),
+        ...(gemini4 && hasSeed ? ['seed'] : []),
     ] : [];
-    if (argon && !['global', 'us', 'eu'].includes(input.vertexai_region || 'global')) fail('Argon requires global, us or eu.');
+    if (gemini4 && !['global', 'us', 'eu'].includes(input.vertexai_region || 'global')) fail(`${gemini4.label} requires global, us or eu.`);
     const tier = choice(input.vertexai_service_tier, ['auto', 'standard', 'priority', 'flex'], 'auto', '服务档位');
     const capacity = choice(input.vertexai_request_type, ['auto', 'shared', 'dedicated'], 'auto', '容量类型');
     const version = choice(input.vertexai_api_version, ['auto', 'v1', 'v1beta1'], 'auto', 'API 版本');
     const timeout = Number(input.vertexai_timeout ?? 1200);
     if (!Number.isFinite(timeout) || timeout < 30 || timeout > 7200) fail('总等待上限应为 30～7200 秒。');
     if (tier === 'flex' && (input.vertexai_region || 'global') !== 'global') fail('Flex 需要 global 区域。');
-    if (argon && tier === 'flex') fail('当前 Vertex 官方 Flex 支持列表未列出 Argon，请选择默认、Standard 或 Priority。');
+    if (gemini4 && !gemini4.flex && tier === 'flex') fail(`当前 Vertex 官方 Flex 支持列表未列出 ${gemini4.label}，请选择默认、Standard 或 Priority。`);
     if (capacity === 'dedicated' && tier !== 'auto') fail('仅专用容量与 PayGo 档位不能同时指定。');
-    const autoContinue = input.vertexai_auto_continue !== false && argon;
+    const autoContinue = input.vertexai_auto_continue !== false && Boolean(gemini4);
     const max = Number(input.max_tokens ?? 65536);
     if (!Number.isInteger(max) || max < 1 || max > 1048576) fail('输出上限应为 1～1048576 个 token。');
-    if (argon && version === 'v1' && autoContinue && max > (input.stream ? 65536 : 32768)) {
-        fail('Argon 超长续传需要 v1beta1，请将 API 版本设为自动或 v1beta1。');
+    if (gemini4 && version === 'v1' && autoContinue) {
+        const v1Cap = input.stream ? gemini4.v1SegmentCap.stream : gemini4.v1SegmentCap.nonStream;
+        if (max > v1Cap) fail(`${gemini4.label} 超长续传需要 v1beta1，请将 API 版本设为自动或 v1beta1。`);
     }
-    return { model, argon, omitSampling, tier, capacity, max, timeoutMs: timeout * 1000, autoContinue,
+    return { model, gemini4, omitSampling, tier, capacity, max, timeoutMs: timeout * 1000, autoContinue,
         apiVersion: version === 'auto' ? (autoContinue ? 'v1beta1' : 'v1') : version,
         streamArguments: modern(model) && !/^gemini-3\.1-flash-lite/.test(model) && input.stream === true && input.vertexai_argument_streaming !== false,
         ignoredParameters,
@@ -112,7 +146,7 @@ export function buildVertexRequest(request, options = vertexOptions(request.body
         if (typeof input.frequency_penalty === 'number' && Number.isFinite(input.frequency_penalty) && input.frequency_penalty !== 0) config.frequencyPenalty = input.frequency_penalty;
         if (typeof input.presence_penalty === 'number' && Number.isFinite(input.presence_penalty) && input.presence_penalty !== 0) config.presencePenalty = input.presence_penalty;
     }
-    if (!options.argon && typeof input.seed === 'number' && Number.isFinite(input.seed) && input.seed >= 0) {
+    if (!options.gemini4 && typeof input.seed === 'number' && Number.isFinite(input.seed) && input.seed >= 0) {
         config.seed = input.seed;
     }
     if (input.stop !== undefined && (!Array.isArray(input.stop) || input.stop.length > 5 || input.stop.some(x => typeof x !== 'string' || !x.length || x.length > 512))) fail('Vertex stop sequences must be at most five non-empty strings.');
@@ -134,7 +168,7 @@ export function buildVertexRequest(request, options = vertexOptions(request.body
         if (Number.isInteger(budget)) config.thinkingConfig.thinkingBudget = budget;
     }
     if (input.request_images) {
-        if (options.argon) fail('Argon 返回文本，图像生成需要选择图像模型。');
+        if (options.gemini4) fail(`${options.gemini4.label} 返回文本，图像生成需要选择图像模型。`);
         config.responseModalities = ['TEXT', 'IMAGE'];
         const imageConfig = {};
         if (input.request_image_resolution && modern(options.model)) imageConfig.imageSize = input.request_image_resolution;
@@ -170,10 +204,15 @@ export function buildVertexRequest(request, options = vertexOptions(request.body
         body.toolConfig = { functionCallingConfig: { mode } };
         if (selected?.function?.name) body.toolConfig.functionCallingConfig = { mode: 'ANY', allowedFunctionNames: [selected.function.name] };
     }
-    if (options.argon) {
+    if (options.gemini4) {
         const thinking = body.generationConfig.thinkingConfig;
-        if (thinking?.thinkingBudget !== undefined) fail('Argon 使用 thinkingLevel，不支持 thinkingBudget。');
-        if (thinking?.thinkingLevel && !['LOW', 'MEDIUM', 'HIGH'].includes(thinking.thinkingLevel)) fail('Argon thinkingLevel 只支持 LOW、MEDIUM、HIGH。');
+        if (thinking?.thinkingBudget !== undefined) fail(`${options.gemini4.label} 使用 thinkingLevel，不支持 thinkingBudget。`);
+        const allowedLevels = options.gemini4.maxThinkingLevel === 'XHIGH'
+            ? ['LOW', 'MEDIUM', 'HIGH', 'XHIGH']
+            : ['LOW', 'MEDIUM', 'HIGH'];
+        if (thinking?.thinkingLevel && !allowedLevels.includes(thinking.thinkingLevel)) {
+            fail(`${options.gemini4.label} thinkingLevel 只支持 ${allowedLevels.join('、')}。`);
+        }
     }
     if (options.omitSampling) {
         for (const key of ['temperature', 'topP', 'topK', 'candidateCount', 'frequencyPenalty', 'presencePenalty']) delete body.generationConfig[key];
