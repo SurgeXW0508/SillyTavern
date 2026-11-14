@@ -122,6 +122,12 @@ class MacroEngine {
 
         const preProcessed = this.#runPreProcessors(input, safeEnv);
 
+        // Pre-processors can introduce macros and post-processors can transform plain text
+        // (e.g. unescaping \{\{). Skip lexer/parser/CST traversal only when no '{{' remains.
+        if (typeof preProcessed === 'string' && preProcessed.length > 0 && !preProcessed.includes('{{')) {
+            return this.#runPostProcessors(preProcessed, safeEnv);
+        }
+
         const { cst, lexingErrors, parserErrors } = MacroParser.parseDocument(preProcessed);
 
         // For now, we log and still try to process what we can.

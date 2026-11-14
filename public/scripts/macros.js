@@ -599,6 +599,8 @@ function getOutletPrompt(key) {
     return value || '';
 }
 
+const LEGACY_NON_CURLY_MACRO_REGEX = /<(?:USER|BOT|CHAR|CHARIFNOTGROUP|GROUP)>/i;
+
 /**
  * Substitutes {{macro}} parameters in a string.
  * @param {string} content - The string to substitute parameters in.
@@ -614,6 +616,19 @@ export function evaluateMacros(content, env, postProcessFn) {
 
     postProcessFn = typeof postProcessFn === 'function' ? postProcessFn : (x => x);
     const rawContent = content;
+
+    // Plain regex replacements and ordinary chat text have no macros to run.
+    // Preserve observable side effects (character prompt getter read, chat hash
+    // initialization, and registered env population) without compiling unused
+    // patterns or hashing rawContent on every plain-text call.
+    if (typeof content === 'string' && !content.includes('{{') && !LEGACY_NON_CURLY_MACRO_REGEX.test(content)) {
+        if (power_user.prefer_character_prompt && env && typeof env === 'object') {
+            void env.charPrompt;
+        }
+        getChatIdHash();
+        MacrosParser.populateEnv(env);
+        return content;
+    }
 
     /**
      * Built-ins running before the env variables
