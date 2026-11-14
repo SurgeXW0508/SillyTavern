@@ -205,17 +205,25 @@ export class FilterHelper {
     }
 
     /**
+     * Retrieves the list of tag IDs assigned to a searchable entity.
+     * @param {object} entity Searchable entity
+     * @returns {string[]} Assigned tag IDs, or an empty array if untagged
+     */
+    getElementTags(entity) {
+        const isCharacter = entity.type === 'character';
+        const lookupValue = isCharacter ? entity.item.avatar : String(entity.id);
+        const entityTags = tag_map[lookupValue];
+        return Array.isArray(entityTags) ? entityTags : [];
+    }
+
+    /**
      * Checks if the given entity is tagged with the given tag ID.
      * @param {object} entity Searchable entity
      * @param {string} tagId Tag ID to check
      * @returns {boolean} Whether the entity is tagged with the given tag ID
      */
     isElementTagged(entity, tagId) {
-        const isCharacter = entity.type === 'character';
-        const lookupValue = isCharacter ? entity.item.avatar : String(entity.id);
-        const isTagged = Array.isArray(tag_map[lookupValue]) && tag_map[lookupValue].includes(tagId);
-
-        return isTagged;
+        return this.getElementTags(entity).includes(tagId);
     }
 
     /**

@@ -358,6 +358,26 @@ let tag_map = {};
 let expanded_tags_cache = [];
 
 /**
+ * Creates a predicate for entities hidden inside unselected closed folders.
+ * Pre-indexes closed folder IDs once per filter pass instead of scanning all folders per entity.
+ * @param {object[]} entities Available entities, including folder tags
+ * @param {string[]} selectedTags Currently selected tag IDs
+ * @returns {(entity: object) => boolean} Whether the entity belongs to an unselected closed folder
+ */
+function createClosedFolderFilter(entities, selectedTags) {
+    const selectedSet = new Set(selectedTags);
+    const closedFolderIds = new Set(entities
+        .filter(entity => entity.type === 'tag' && TAG_FOLDER_TYPES[entity.item.folder_type] === TAG_FOLDER_TYPES.CLOSED && !selectedSet.has(entity.id))
+        .map(entity => entity.id));
+
+    if (closedFolderIds.size === 0) {
+        return () => false;
+    }
+
+    return entity => entitiesFilter.getElementTags(entity).some(tagId => closedFolderIds.has(tagId));
+}
+
+/**
  * Applies the basic filter for the current state of the tags and their selection on an entity list.
  * @param {Array<Object>} entities List of entities for display, consisting of tags, characters and groups.
  * @param {Object} param1 Optional parameters, explained below.
@@ -382,11 +402,11 @@ function filterByTagState(entities, { globalDisplayFilters = false, subForEntity
 
     if (globalDisplayFilters) {
         // Prepare some data for caching and performance
-        const closedFolders = entities.filter(x => x.type === 'tag' && TAG_FOLDER_TYPES[x.item.folder_type] === TAG_FOLDER_TYPES.CLOSED);
+        const isHiddenByClosedFolder = filterHidden ? createClosedFolderFilter(entities, filterData.selected) : null;
 
         entities = entities.filter(entity => {
             // Hide entities that are in a closed folder, unless that one is opened
-            if (filterHidden && entity.type !== 'tag' && closedFolders.some(f => entitiesFilter.isElementTagged(entity, f.id) && !filterData.selected.includes(f.id))) {
+            if (entity.type !== 'tag' && isHiddenByClosedFolder?.(entity)) {
                 return false;
             }
 
@@ -419,7 +439,9 @@ function filterByTagState(entities, { globalDisplayFilters = false, subForEntity
 function filterTagSubEntities(tag, entities, { filterHidden = true } = {}) {
     const filterData = structuredClone(entitiesFilter.getFilterData(FILTER_TYPES.TAG));
 
-    const closedFolders = entities.filter(x => x.type === 'tag' && TAG_FOLDER_TYPES[x.item.folder_type] === TAG_FOLDER_TYPES.CLOSED);
+    const isHiddenByClosedFolder = filterHidden && TAG_FOLDER_TYPES[tag.folder_type] !== TAG_FOLDER_TYPES.CLOSED
+        ? createClosedFolderFilter(entities, filterData.selected)
+        : null;
 
     entities = entities.filter(sub => {
         // Filter out all tags and and all who isn't tagged for this item
@@ -428,7 +450,7 @@ function filterTagSubEntities(tag, entities, { filterHidden = true } = {}) {
         }
 
         // Hide entities that are in a closed folder, unless the closed folder is opened or we display a closed folder
-        if (filterHidden && sub.type !== 'tag' && TAG_FOLDER_TYPES[tag.folder_type] !== TAG_FOLDER_TYPES.CLOSED && closedFolders.some(f => entitiesFilter.isElementTagged(sub, f.id) && !filterData.selected.includes(f.id))) {
+        if (isHiddenByClosedFolder?.(sub)) {
             return false;
         }
 
@@ -2609,8 +2631,11 @@ function registerTagsSlashCommands() {
  */
 export function applyCharacterTagsToMessageDivs({ mesIds = [] } = {}) {
     try {
-        const messagesFilter = buildMessagesFilter(mesIds);
-        const messages = $('#chat').children(messagesFilter);
+        // Filter by mesid Set in one pass instead of matching a giant selector branch list per node.
+        const requestedIds = Array.isArray(mesIds) ? mesIds : mesIds == null ? [] : [mesIds];
+        const messageIds = new Set(requestedIds.map(String));
+        const messages = $('#chat').children('.mes').filter((_, element) =>
+            messageIds.size === 0 || messageIds.has(element.getAttribute('mesid')));
 
         // Clear existing tags
         messages.each(function () {
@@ -2676,34 +2701,6 @@ export function applyCharacterTagsToMessageDivs({ mesIds = [] } = {}) {
     } catch (error) {
         console.error('Error applying character tags to message divs:', error);
     }
-}
-
-/**
- * Builds a jQuery selector string to filter messages by their IDs.
- * @param {number|number[]} mesIds - An id or array of message IDs to filter by.
- * @returns {string} A jQuery selector string that matches messages with the specified IDs.
- * If mesIds is empty, it returns '.mes' to select all messages.
- * @example
- * buildMessagesFilter([1, 5]); // Returns '.mes[mesid="1"],.mes[mesid="5"]'
- * buildMessagesFilter([]); // Returns '.mes'
- */
-function buildMessagesFilter(mesIds) {
-    const allMessages = '.mes';
-
-    if (!mesIds) {
-        return allMessages; // If no mesIds provided, select all messages
-    }
-
-    const mesIdsArray = Array.isArray(mesIds) ? mesIds : [mesIds];
-
-    if (mesIdsArray?.length) {
-        // Create a valid jQuery selector for multiple attribute values.
-        // Example output: '.mes[mesid="1"],.mes[mesid="5"]'
-        return mesIdsArray.map(id => `.mes[mesid="${id}"]`).join(',');
-    }
-
-    // If mesIds is empty, select all messages.
-    return allMessages;
 }
 
 /**
