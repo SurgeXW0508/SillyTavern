@@ -22,6 +22,7 @@ import { StructuredCloneMap } from './util/StructuredCloneMap.js';
 import { renderTemplateAsync } from './templates.js';
 import { t } from './i18n.js';
 import { accountStorage } from './util/AccountStorage.js';
+import { BoundedTextCache } from './util/bounded-text-cache.js';
 import { getOrCreatePersonaDescriptor, setPersonaDescription, user_avatar } from './personas.js';
 
 export const world_info_insertion_strategy = {
@@ -232,6 +233,24 @@ class WorldInfoBuffer {
      */
     #startDepth = 0;
 
+    /** @type {BoundedTextCache} Scan text by depth, enabled context fields, and recursion mode. */
+    #scanCache = new BoundedTextCache();
+
+    /** @type {BoundedTextCache} Case-folded scan text shared across keyword matches. */
+    #caseFoldCache = new BoundedTextCache();
+
+    /** @type {WIGlobalScanData|null} Last observed context values. */
+    #cachedScanData = null;
+
+    static #scanFields = [
+        ['matchPersonaDescription', 'personaDescription'],
+        ['matchCharacterDescription', 'characterDescription'],
+        ['matchCharacterPersonality', 'characterPersonality'],
+        ['matchCharacterDepthPrompt', 'characterDepthPrompt'],
+        ['matchScenario', 'scenario'],
+        ['matchCreatorNotes', 'creatorNotes'],
+    ];
+
     /**
      * Initialize the buffer with the given messages.
      * @param {string[]} messages Array of messages to add to the buffer
@@ -240,6 +259,16 @@ class WorldInfoBuffer {
     constructor(messages, globalScanData) {
         this.#initDepthBuffer(messages);
         this.#globalScanData = globalScanData;
+        this.#cachedScanData = { ...globalScanData };
+    }
+
+    /**
+     * Invalidates derived scan and case-folded text when scan inputs change.
+     * @returns {void}
+     */
+    #clearCache() {
+        this.#scanCache.clear();
+        this.#caseFoldCache.clear();
     }
 
     /**
@@ -263,11 +292,24 @@ class WorldInfoBuffer {
      * Gets a string that respects the case sensitivity setting
      * @param {string} str The string to transform
      * @param {WIScanEntry} entry The entry that triggered the scan
+     * @param {boolean} [cache=false] Reuse case folding for scan text, but not individual keys
      * @returns {string} The transformed string
     */
-    #transformString(str, entry) {
+    #transformString(str, entry, cache = false) {
         const caseSensitive = entry.caseSensitive ?? world_info_case_sensitive;
-        return caseSensitive ? str : str.toLowerCase();
+        if (caseSensitive) {
+            return str;
+        }
+        if (!cache) {
+            return str.toLowerCase();
+        }
+        const cached = this.#caseFoldCache.get(str);
+        if (cached !== undefined) {
+            return cached;
+        }
+        const folded = str.toLowerCase();
+        this.#caseFoldCache.set(str, folded);
+        return folded;
     }
 
     /**
@@ -290,6 +332,19 @@ class WorldInfoBuffer {
         if (depth > MAX_SCAN_DEPTH) {
             console.warn(`[WI] Invalid WI scan depth ${depth}. Truncating to ${MAX_SCAN_DEPTH}`);
             depth = MAX_SCAN_DEPTH;
+        }
+
+        // Context can be edited while an asynchronous scan is in progress.
+        if (WorldInfoBuffer.#scanFields.some(([, field]) => this.#cachedScanData?.[field] !== this.#globalScanData?.[field])) {
+            this.#clearCache();
+            this.#cachedScanData = { ...this.#globalScanData };
+        }
+        const flags = WorldInfoBuffer.#scanFields.reduce((mask, [flag], index) => entry[flag] ? mask | (1 << index) : mask, 0);
+        const includeRecursion = scanState !== scan_state.MIN_ACTIVATIONS;
+        const cacheKey = `${depth}:${this.#startDepth}:${flags}:${includeRecursion ? 1 : 0}`;
+        const cachedResult = this.#scanCache.get(cacheKey);
+        if (cachedResult !== undefined) {
+            return cachedResult;
         }
 
         const MATCHER = '\x01';
@@ -320,10 +375,11 @@ class WorldInfoBuffer {
         }
 
         // Min activations should not include the recursion buffer
-        if (this.#recurseBuffer.length > 0 && scanState !== scan_state.MIN_ACTIVATIONS) {
+        if (this.#recurseBuffer.length > 0 && includeRecursion) {
             result += JOINER + this.#recurseBuffer.join(JOINER);
         }
 
+        this.#scanCache.set(cacheKey, result);
         return result;
     }
 
@@ -342,7 +398,7 @@ class WorldInfoBuffer {
         }
 
         // Otherwise we do normal matching of plaintext with the chosen entry settings
-        haystack = this.#transformString(haystack, entry);
+        haystack = this.#transformString(haystack, entry, true);
         const transformedString = this.#transformString(needle, entry);
         const matchWholeWords = entry.matchWholeWords ?? world_info_match_whole_words;
 
@@ -371,6 +427,7 @@ class WorldInfoBuffer {
      */
     addRecurse(message) {
         this.#recurseBuffer.push(message);
+        this.#clearCache();
     }
 
     /**
@@ -379,6 +436,7 @@ class WorldInfoBuffer {
      */
     addInject(message) {
         this.#injectBuffer.push(message);
+        this.#clearCache();
     }
 
     /**
@@ -394,6 +452,7 @@ class WorldInfoBuffer {
      */
     advanceScan() {
         this.#skew++;
+        this.#clearCache();
     }
 
     /**
