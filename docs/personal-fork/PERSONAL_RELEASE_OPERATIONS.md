@@ -12,24 +12,26 @@ ghcr.io/surgexw0508/sillytavern-personal@sha256:22973f7169fa694a0894b054e2b754cc
 
 实际Image ID为`sha256:dfb4f08735296b0b7610e9936cbce707af8d0021ac6d4eaafadc93c074b09e01`。Release source是`1af2180585e5bbe49159bc8884d5c890641f13c3`，线上Runtime仍是`090cbba6d40e5d117ab41a9e6deb20b40e2dc336`；后续合入`release`分支的文档提交或暂缓发版的阶段性Runtime里程碑（如2026-11-12合入的Vertex收尾Runtime `e49a694083cc46dbf883f13eab664076c139011f`）在未执行正式Personal Release构建与NAS切换前，均不改变当前线上镜像source或实际运行代码。
 
-2026-11-12再次核验：容器状态为`running`、RestartCount为0；Compose 标签确认项目名为`sillytavern`，WorkingDir为`/vol3/1000/SillyTavern`，配置文件为`/vol3/1000/SillyTavern/docker-compose.yml`。挂载仍将宿主机的`config`、`data`、`plugins`、`extensions`分别映射到容器对应目录；视频目录以只读方式挂载。飞牛 Docker 已正式管理该 Compose 项目，无需迁移管理方式。
+2026-11-12再次核验：容器状态为`running`、RestartCount为0；Compose 标签确认项目名为`sillytavern`，容器名为`sillytavern`（宿主机 Compose 工作目录记为 `<NAS_ST_COMPOSE_DIR>`，配置文件为 `<NAS_ST_COMPOSE_DIR>/docker-compose.yml`）。挂载将 Compose 项目下的 `./config`、`./data`、`./plugins`、`./extensions` 分别映射到容器对应目录；外部媒体目录以只读方式挂载至 `/media/video-clips`。飞牛 Docker 已正式管理该 Compose 项目，无需迁移管理方式。
 
-NAS Tools实际为`personal/stable@2f6a9c54d2c906b4a0e44d20c12d0712552e393d`，origin为个人Fork，tracking为`origin/personal/stable`，工作区clean。BaiBaoKu NAS已于2026-11-12完成Git跟踪关系整理：当前分支`personal/stable`，origin为`SurgeXW0508/baibaoku`，upstream为`baibai-git/baibaoku`，tracking为`origin/personal/stable`，工作区clean；NAS当前Git HEAD仍停留在2026-11-12检出的`4814830f`，实际运行Runtime仍是`b211a4e97fdaec24dc8b90c85ddc198fac9ac200`（0.7.3），并保留`backup/pre-personal-stable-20261112`。此后GitHub `origin/personal/stable` 已于2026-11-13至2026-11-14先后推进合入性能归属收敛及柏宝箱`1.2.0`/柏宝库`0.7.4`加固Runtime（当前Tools `595854ee` / Runtime `1e8d5a81`，BaiBaoKu `2ba8864f` / Runtime `e9d95265`），NAS尚未拉取这些更新；在ST正式新镜像发布并同步切换前保持NAS三组件版本锁定不动。
+切换 `v1.19.0-personal.2` 前的 NAS 实机基线（`v1.19.0-personal.1` 组合）：Tools 为 `personal/stable@2f6a9c54d2c906b4a0e44d20c12d0712552e393d`，origin 为个人 Fork，tracking 为 `origin/personal/stable`，工作区 clean；BaiBaoKu 于 2026-11-12 完成 Git 跟踪整理，分支 `personal/stable`，origin 为 `SurgeXW0508/baibaoku`，upstream 为 `baibai-git/baibaoku`，tracking 为 `origin/personal/stable`，工作区 clean，停留在 `4814830f`（实际运行 Runtime `b211a4e9`，`0.7.3`，保留备份分支 `backup/pre-personal-stable-20261112`）。
 
-正式镜像只确认启动、Health、Vertex普通RP正文生成和刷新后聊天记录保留。Candidate多轮/Stop/Regenerate等历史测试单独记录，未在正式环境复验的能力不标通过。生产数据恢复和安全评估也不由healthy状态代替。
+2026-11-14 已统一发布下一正式版本 **`v1.19.0-personal.2`**（冻结 ST Runtime `9817c0e6de8647f6519b5cc2fc583df3070c4053`，配对 `ST-BaiBai-Tools` `1.2.0` `personal/stable@84345b9ac394a093bb89d8251ab197335f8f0b5b` / Runtime `1e8d5a818e19c7deafee42808aa39033c25170a1` 与 `baibaoku` `0.7.4` `personal/stable@0f8bd4d167713234ed2b9a56a62b4b37bcaea610` / Runtime `e9d95265c77187446177e839a2b97975ebb2aa0d`），待用户按本文流程在 NAS 执行三组件同步切换与实机 Smoke 后，再将 `PRODUCTION_BASELINE.json` 的 `current_production` 推进至 `v1.19.0-personal.2`。
+
+正式镜像只确认真实环境已核验项；Candidate 与自动化测试结果单独记录，未在正式环境复验的能力不标通过。生产数据恢复和安全评估也不由 healthy 状态代替。
 
 ## 发布源与分支
 
 - `upstream/release`：纯官方release同步基线，当前`06bde939fb1e9c4c8d8641d810f0a916b5bce127`，不放个人策略。
-- `stage/*`：独立开发和验证。`release`：Personal正式稳定分支。
-- `personal-release.json`：审查过的版本、上游基线、Runtime SHA、插件pin和当时验收范围；修改并推送到`release`会触发`personal-release.yml`自动打Tag并构建推送GHCR镜像。阶段性合入`release`但暂不构建Docker镜像时，保持该文件固定在当前已发布版本（`v1.19.0-personal.1`），待统一发布下一正式版本时再更新。
+- `stage/*`：独立开发和验证（合入且核验 `0 ahead` 后清理）。`release`：Personal正式稳定分支。
+- `personal-release.json`：审查过的版本、上游基线、Runtime SHA、两伴随仓库 `personal/stable` pin 和验收范围；修改并推送到`release`会触发`personal-release.yml`自动打Tag并构建推送GHCR镜像（当前已更新至 `v1.19.0-personal.2`）。
 - Shalistera仅为参考，不自动同步。任何组件更新都要先核查另两个组件，具体流程以canonical文档为准。
 
 长期流程：**Review → Stage → CI → Release/Tag → GHCR → NAS Compose → Health/Smoke**。只有经过审查和CI的候选才合入release，通过既有Personal Release Workflow生成版本化制品；不因官方或柏宝有新提交直接升级生产，也不顺手更新伴随插件。
 
-既有Personal Release流水线创建固定Tag、构建同一source commit、推送GHCR、执行无凭据/无生产数据的镜像启动health smoke，再发布附带资产的Release。GITHUB_TOKEN生成的Tag不作为级联触发另一workflow的依赖。不发布个人latest；同版本不覆盖，失败仅重跑失败job，成功build不重建，已公开资产不追改。本轮不重跑、修改或发布任何制品。
+既有Personal Release流水线创建固定Tag、构建同一source commit、推送GHCR、执行无凭据/无生产数据的镜像启动health smoke，再发布附带资产的Release。GITHUB_TOKEN生成的Tag不作为级联触发另一workflow的依赖。不发布个人latest；同版本不覆盖，失败仅重跑失败job，成功build不重建，已公开资产不追改。
 
-镜像支持linux/amd64与linux/arm64构建，历史流水线启动smoke仅在原生amd64执行；构建成功不是其他平台实机验收。Dockerfile的base仍为浮动`node:lts-alpine3.23`，生产固定本次已验证Digest，不把未来同源码重建视为相同镜像。
+镜像支持linux/amd64与linux/arm64构建，流水线启动smoke在原生amd64执行；构建成功不是其他平台实机验收。Dockerfile的base仍为浮动`node:lts-alpine3.23`，生产固定本次已验证Digest，不把未来同源码重建视为相同镜像。
 
 ## Validated Stack与生产事实
 
@@ -37,12 +39,12 @@ NAS Tools实际为`personal/stable@2f6a9c54d2c906b4a0e44d20c12d0712552e393d`，o
 
 - `validated-stack.json`：Tag、source/Runtime SHA、上游baseline、镜像Digest/build date/Actions URL、两插件pin及发布时验收快照。
 - `stack.env`：非秘密的ST_IMAGE Digest值；是否接入某个NAS管理入口需按实际环境确认。
-- `verify-stack.py`：已有只读核验工具，不pull、不checkout、不重启、不修改数据。
+- `verify-stack.py`：已有只读核验工具（同时校验 ST Digest/source label 以及柏宝箱、柏宝库的 `origin`、`personal/stable` 分支和 `origin/personal/stable` 跟踪关系），不pull、不checkout、不重启、不修改数据。
 - `SHA256SUMS`：资产传输完整性校验。
 
-Release资产是不可变的发行记录，本次不修改Tag/Release、镜像、personal-release.json或资产中的历史pending字段。**发布后的真实部署与验收事实更新在PRODUCTION_BASELINE.json和Release Closeout**，不能因为旧资产写着pending就推断NAS尚未部署，也不能把Candidate passed升级成正式passed。
+Release资产是不可变的发行记录，已发布版本的历史资产与Tag不追改。**发布后的真实部署与验收事实更新在PRODUCTION_BASELINE.json**，不能因为资产写着pending就推断NAS尚未部署，也不能把Candidate/自动化passed升级成正式passed。
 
-Tools部署pin仍为已验证的`2f6a9c54`。已有核验工具仅在全部Git树（只排除AGENTS.md）相同时接受维护后继，并分别输出实际SHA与验证SHA；不能豁免source/config/build改动。本轮没有更新NAS Tools，也没有执行该工具。
+`verify-stack.py` 对柏宝箱在全部 Git 树（仅排除 `AGENTS.md`）一致时接受文档维护后继，并分别输出实际 SHA 与验证 SHA；不能豁免 source/config/build 改动。
 
 ## 后续NAS更新边界
 
@@ -53,14 +55,15 @@ Tools部署pin仍为已验证的`2f6a9c54`。已有核验工具仅在全部Git�
 2026-11-12已通过容器标签确认，`sillytavern` 是飞牛 Docker Compose 项目：
 
 - Project：`sillytavern`
-- WorkingDir：`/vol3/1000/SillyTavern`
-- ConfigFiles：`/vol3/1000/SillyTavern/docker-compose.yml`
+- Container：`sillytavern`
+- WorkingDir：`<NAS_ST_COMPOSE_DIR>`（原 Compose 项目所在目录，日常 GUI 更新无需手输宿主机绝对路径）
+- ConfigFiles：`<NAS_ST_COMPOSE_DIR>/docker-compose.yml`
 
 生产 Compose 使用固定 GHCR Digest，而不是浮动标签。后续 ST Runtime 更新可以完全通过飞牛 Docker 图形界面完成，不需要 SSH 登录 NAS。
 
 ### 正常更新步骤
 
-1. Work 完成 Runtime 修改、审查、测试，并按授权流程合入个人 `release`。
+1. 完成 Runtime 修改、审查、测试，并按授权流程合入个人 `release`。
 2. 使用仓库既有 Personal Release Workflow 发布正式版本。GitHub Actions 构建并推送 GHCR 镜像；从对应 Release 的 Validated Stack / 发布信息取得本次**不可变 Digest**。
 3. 打开飞牛 OS → Docker → Compose → `sillytavern` 项目，编辑现有 Compose 配置。
 4. 只将 `image:` 改为本次已审查的完整 Digest，例如：
@@ -73,18 +76,19 @@ Tools部署pin仍为已验证的`2f6a9c54`。已有核验工具仅在全部Git�
 6. 在飞牛 Docker 图形界面确认容器使用新镜像、状态正常、没有持续重启，并查看启动日志；再进行本次变更涉及的最小业务 Smoke。
 7. 验收成功后记录新的 Digest、Image ID、实际插件 SHA 和验收范围，更新 Production Baseline。保留上一个已验证组合作为回滚目标。
 
-### 必须保留的部署路径
+### 必须保留的部署挂载关系
 
 ```text
 Compose project: sillytavern
-WorkingDir:      /vol3/1000/SillyTavern
-Config file:     /vol3/1000/SillyTavern/docker-compose.yml
+Container name:  sillytavern
+WorkingDir:      <NAS_ST_COMPOSE_DIR>
+Config file:     <NAS_ST_COMPOSE_DIR>/docker-compose.yml
 
-./config    -> /home/node/app/config
-./data      -> /home/node/app/data
-./plugins   -> /home/node/app/plugins
+./config     -> /home/node/app/config
+./data       -> /home/node/app/data
+./plugins    -> /home/node/app/plugins
 ./extensions -> /home/node/app/public/scripts/extensions/third-party
-/vol1/1000/ST-Video/videos -> /media/video-clips (read-only)
+<NAS_MEDIA_RO_DIR> -> /media/video-clips (read-only)
 ```
 
 ### Digest 更新注意事项
@@ -97,24 +101,24 @@ Config file:     /vol3/1000/SillyTavern/docker-compose.yml
 
 ## Companion Plugin 更新入口
 
-- **柏宝箱**：通过 SillyTavern 原生第三方扩展管理器更新当前 `personal/stable` 分支，然后完整刷新浏览器。它是独立挂载的前端 Git Extension，不需要重建 ST 镜像。详细流程见 [ST-BaiBai-Tools Personal Maintenance](https://github.com/SurgeXW0508/ST-BaiBai-Tools/blob/personal/stable/docs/PERSONAL_MAINTENANCE.md)。
-- **柏宝库**：它是独立挂载的 Server Plugin，不属于前端扩展更新按钮。NAS 已完成一次性分支整理；日常在飞牛 Docker 的 `sillytavern` 容器终端中只更新目标插件，再通过图形界面重启容器。不要用会遍历所有插件的全局更新命令。详细流程见 [BaiBaoKu Personal Maintenance](https://github.com/SurgeXW0508/baibaoku/blob/personal/stable/docs/PERSONAL_MAINTENANCE.md)。
+- **柏宝箱**：通过 SillyTavern 第三方扩展管理器更新当前 `personal/stable` 分支，然后完整刷新浏览器。它是独立挂载的前端 Git Extension，不需要重建 ST 镜像（注意：柏宝库默认开启扩展管理接管，若出现 `LOCAL_CHANGES` / `DIVERGED` / `DETACHED_HEAD` 提示，切勿点击“强制更新”，先核对 `origin` 与 `personal/stable` 跟踪关系）。详细流程见 [ST-BaiBai-Tools Personal Maintenance](https://github.com/SurgeXW0508/ST-BaiBai-Tools/blob/personal/stable/docs/PERSONAL_MAINTENANCE.md)。
+- **柏宝库**：它是独立挂载的 Server Plugin，不属于前端扩展更新按钮。NAS 已完成一次性分支整理；日常在飞牛 Docker 的 `sillytavern` 容器终端中对固定容器路径 `/home/node/app/plugins/baibaoku` 执行定向 `git pull --ff-only origin personal/stable`，再通过图形界面重启容器（或随 ST Compose 新镜像一并重新部署重启）。不要用会遍历所有插件的全局更新命令。详细流程见 [BaiBaoKu Personal Maintenance](https://github.com/SurgeXW0508/baibaoku/blob/personal/stable/docs/PERSONAL_MAINTENANCE.md)。
 
 正常维护不需要 SSH 登录。飞牛 Docker 容器终端只用于柏宝库这类 Server Plugin 的定向 Git 更新；重启和 Compose 镜像切换均通过飞牛图形界面完成。
 
-仓库已有的可选只读入口如下，实际是否在NAS使用未在本轮提供；不据此宣称自动/GUI更新已实现：
+仓库已有的可选只读入口如下：
 
 ```bash
 python3 verify-stack.py --stack validated-stack.json --config nas-paths.json
 ```
 
-`nas-paths.json`应只放已确认的容器名和两插件容器内路径，无凭据。默认release模式检查Digest和source label，Candidate模式不证明正式镜像匹配。工具不能证明没有重复安装，也不代替Save Generate/Generate Retry独立开关、自更新、扩展管理接管和模型行为的检查；Extension Manager未使用则无需为了验证强制开启。
+`nas-paths.json` 留存本地不入库，只放已确认的容器名（`sillytavern`）和两插件容器内固定路径（`/home/node/app/public/scripts/extensions/third-party/ST-BaiBai-Tools`、`/home/node/app/plugins/baibaoku`），无凭据。默认 release 模式检查 Digest、source label 与两插件 `origin`/`personal/stable` 跟踪关系。工具不能证明没有重复安装，也不代替 Save Generate/Generate Retry 独立开关、自更新、扩展管理接管和模型行为的检查。
 
 本版此前已验证GHCR manifest可匿名读取；未来版本仍按实际包权限检查，不在聊天、Compose或命令参数写PAT。不得以仓库公开推断所有镜像权限。
 
 ## Current + Previous与恢复边界
 
-以后每次成功升级，记录当前与上一个已验证正式Personal镜像的Digest、Validated Stack、实际插件SHA及相应配置。当前Previous正式Personal版本尚未登记，不把临时Candidate冒充Previous；旧官方1.19.0回滚镜像仍保留，到下一次Personal Release成功后再按Current + Previous规则轮换。
+以后每次成功升级，记录当前与上一个已验证正式Personal镜像的Digest、Validated Stack、实际插件SHA及相应配置。待 `v1.19.0-personal.2` 在 NAS 完成实机切换验收后，`v1.19.0-personal.1`（Digest `sha256:22973f7169fa694a0894b054e2b754ccf0ea881703d32a011e473c79c87ac740`）将转为 `previous_verified_personal_release` 回滚锚点，届时用户可按 Current + Previous 规则轮换旧官方 `1.19.0` 镜像。
 
 Runtime故障优先回到上一个已验证镜像，同时确认Tools/BaiBaoKu与该组合一致；插件有漂移时需恢复相应代码/配置，不能只回滚ST留下新Hook/Branch。数据恢复与Runtime回滚分开，不自动覆盖聊天数据。
 
@@ -125,18 +129,19 @@ Runtime故障优先回到上一个已验证镜像，同时确认Tools/BaiBaoKu�
 | 现状 | 后续责任与范围 |
 | --- | --- |
 | Candidate镜像和临时目录尚未清理 | 用户在独立NAS清理任务中确认具体资产，不在开发分支处理 |
-| 官方1.19.0回滚镜像仍保留 | 用户在下一次Personal Release成功后按Current/Previous规则评估轮换 |
+| 官方1.19.0回滚镜像仍保留 | 待 `v1.19.0-personal.2` 实机验收通过后，由用户按 Current/Previous 规则评估轮换 |
 | 完整目录备份仍保留 | 由用户按需自行保留管理；镜像回滚不自动覆盖用户数据 |
-| 部分Vertex及非Vertex能力未正式验收 | 对应能力变化或确有使用需要时，由维护者/用户补受影响组合验证，不追增额外开发 |
+| 真实 Google API 新特性与部分能力待线上核验 | 部署 `v1.19.0-personal.2` 后重点顺手核验 Gemini 4 前缀变化签名重放（`prefixMismatchBehavior=DROP`）与 `4H Flex` |
 
-补充结案说明（2026-11-13）：飞牛Compose GUI更新流程与柏宝库NAS Git跟踪关系（`personal/stable`）均已确认落地；启动日志`listen is enabled but private request filter is disabled`经确认NAS酒馆仅通过局域网/Tailscale单人自用、无公网暴露，属于容器端口映射的预期状态，不再列为安全待办；Backrest备份事项不再作为Pending跟踪。临时资产保持保留，Production Baseline的`cleanup_allowed`继续为`false`；未经明确授权不删除任何文件、镜像或备份。
+补充结案说明（2026-11-13 / 2026-11-14）：飞牛Compose GUI更新流程与柏宝库NAS Git跟踪关系（`personal/stable`）均已确认落地；公开仓库现行文档中的宿主机存储池绝对路径与具体组网工具名已收敛为泛化占位描述（容器名 `sillytavern`、Compose 项目名 `sillytavern`、相对挂载 `./config` 等及容器内路径 `/home/node/app/...` 保持精确不变，零损部署可操作性）；启动日志`listen is enabled but private request filter is disabled`经确认NAS酒馆仅通过内网/专用组网单人自用、无公网暴露，属于容器端口映射的预期状态，不再列为安全待办；Backrest备份事项不再作为Pending跟踪。临时资产保持保留，Production Baseline的`cleanup_allowed`继续为`false`；未经明确授权不删除任何文件、镜像或备份。
 
 ## 当前仓库与发布状态
 
-2026-11-12至2026-11-14维护与阶段合入记录：
+2026-11-12至2026-11-14阶段合入与 **`v1.19.0-personal.2` 统一发版**记录：
 
-- 部署流程与分支治理：已确认飞牛Compose图形化更新入口、建立柏宝箱与柏宝库个人维护Runbook，并完成柏宝库NAS Git跟踪关系整理（`personal/stable@4814830f`，跟踪`origin/personal/stable`）。
-- Vertex阶段性收尾合入`release`（2026-11-12）：已将经过内部diff审查与外部安全/协议复核的Vertex收尾分支`stage/vertex-protocol-and-ux`快进合入`release`（阶段Runtime基线`e49a694083cc46dbf883f13eab664076c139011f`）。
-- 三仓库性能优化与能力归属收敛合入`release` / `personal/stable`（2026-11-13）：已完成内部审查、外部复核闭环（含柏宝箱`FX3-1`构建产物路径脱离检出目录依赖与柏宝库`FX3-2`双后端完整`origin`跟踪核验）及真实Chromium三库联跑验收，并按用户授权将`SillyTavern` `stage/perf-worldinfo`快进合入`release`（阶段Runtime基线`e92f8dc4dc2b6bed036567e9df6de3c376ffba6d`）、`ST-BaiBai-Tools` `candidate/perf-worldinfo`快进合入`personal/stable`（`3314098e1f009c253ed399b84b05876791472484`，Runtime/`dist` `61180ebd1e7844b2c9a2e9962520608b3b3bf1b2`）、`baibaoku` `candidate/perf-worldinfo`快进合入`personal/stable`（`61aae5691cc3488310c3834c20699d910e5fc639`，Runtime `9d9854ca244d21c50231936ffbab9ab48a6fba2b`）。按阶段规划暂不修改`personal-release.json`、不创建Tag/GitHub Release、不触发GHCR Docker构建、不更新NAS或重启容器（在此之前请勿在NAS酒馆扩展管理器单独点击更新伴随插件）；待后续未完成链路全部收口后统一发版与实机验证。
-- 柏宝箱 `1.2.0` + 柏宝库 `0.7.4` 同步、三轮外审加固与终论审查修复合入 `release` / `personal/stable`（2026-11-14）：已完成全部三项代码层 Pending Ownership 收口、三轮外部审查与合入前终论修复并通过全套单测与真实 Chromium 三库联跑验收，按用户授权将 `SillyTavern:stage/baibai-sync-1.2.0` 快进合入 `release`（阶段 Runtime `5c02da4f1bf865dce85558f14bcbd91f949f823a`）、`ST-BaiBai-Tools:candidate/baibai-1.2.0` 快进合入 `personal/stable`（`595854eeaf36fc05ecd380639d3013048693c768`，Runtime/`dist` `1e8d5a818e19c7deafee42808aa39033c25170a1`）、`baibaoku:candidate/baibai-0.7.4` 快进合入 `personal/stable`（`2ba8864fa6b16cb425c05b6c66b4fefbfb5fd64c`，Runtime `e9d95265c77187446177e839a2b97975ebb2aa0d`），并在核验 `0 ahead` 后清理全部已合入临时分支。
-- 用户授权的 Shalistera Core 性能二次吸收合入 `release`（2026-11-14）：已完成 8 项零跨请求持久缓存、零柏系列重叠的 Core 热路径优化（`A1`–`A3`、`A5`、`B1`–`B3`、`C1`–`C2`）及全套单测、19 套 Playwright E2E 与真实 Chromium 三库联跑验收，按用户授权将 `SillyTavern:stage/core-perf-intake` 快进合入 `release`（阶段 Runtime `28797486d97375ddefa49f978390c88f1eb083fd`，柏宝箱与柏宝库零改动）并在核验 `0 ahead` 后删除临时分支。当前 `personal-release.json`、GHCR 镜像与 NAS 生产环境均保持未动；待后续特性分支收口并经用户授权触发正式 `Personal Release` 构建拿到新 GHCR Digest 后，再按三组件顺序同步切换 NAS（在 ST 新镜像部署前请勿单独更新伴随插件）。
+1. **Vertex 协议矩阵、RPC 诊断与原生重放收尾**（2026-11-12，`stage/vertex-protocol-and-ux` → `release`，阶段 Runtime `e49a6940`）。
+2. **三仓库世界书/切卡性能优化与能力归属收敛**（2026-11-13，`stage/perf-worldinfo` / `candidate/perf-worldinfo` → `release` / `personal/stable`）。
+3. **柏宝箱 `1.2.0` + 柏宝库 `0.7.4` 同步、三项 Pending Ownership 代码收口与三轮外审加固**（2026-11-14，`SillyTavern` Runtime `5c02da4f`、柏宝箱 Runtime/`dist` `1e8d5a81`、柏宝库 Runtime `e9d95265`）。
+4. **Shalistera Core 性能二次吸收（8 项零持久缓存热路径优化）**（2026-11-14，`stage/core-perf-intake` → `release`，阶段 Runtime `28797486`）。
+5. **Vertex Gemini 4 `Carbon` / `Hydrogen` 型号能力表、共享预设参数忽略与前缀变化思考签名 `DROP` 重放加固**（2026-11-14，`stage/vertex-gemini4-models` → `release`，冻结 Runtime `9817c0e6de8647f6519b5cc2fc583df3070c4053`，全部候选分支在核验 `0 ahead` 后均已清理）。
+6. **`v1.19.0-personal.2` 正式版本发布**（2026-11-14）：经三库终审确认无阻断项，已更新 `personal-release.json`（配对 `ST-BaiBai-Tools@84345b9ac394a093bb89d8251ab197335f8f0b5b` 与 `baibaoku@0f8bd4d167713234ed2b9a56a62b4b37bcaea610`）并由 GitHub Actions `Personal Release` 流水线构建多架构 GHCR 镜像与不可变 `validated-stack.json` 发行资产，交由用户在飞牛 NAS 执行三组件同步部署。

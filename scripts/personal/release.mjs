@@ -20,7 +20,8 @@ export function validateConfig(config) {
     assert.match(config.tools.runtime_tree_sha256, /^[a-f0-9]{64}$/);
     assert.equal(config.tools.excluded_document, 'AGENTS.md');
     assert.equal(config.tools.save_generate, 'not_assembled');
-    assert.equal(config.baibaoku.repository, 'baibai-git/baibaoku');
+    assert.equal(config.baibaoku.repository, 'SurgeXW0508/baibaoku');
+    assert.equal(config.baibaoku.branch, 'personal/stable');
     assert.match(config.baibaoku.commit, shaPattern);
     assert.equal(config.policies.save_generate, 'disabled');
     assert.equal(config.policies.server_plugin_auto_update, false);

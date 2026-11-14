@@ -48,3 +48,14 @@ class StackChecks(unittest.TestCase):
     def test_remote_credentials_are_not_returned(self):
         self.assertEqual(module.normalized_repository('https://user:DUMMY@github.com/owner/repo.git?token=DUMMY'), 'owner/repo')
         self.assertIsNone(module.normalized_repository('https://example.invalid/owner/repo.git'))
+
+    def test_baibaoku_origin_and_tracking_verified(self):
+        expected = {'repository': 'SurgeXW0508/baibaoku', 'branch': 'personal/stable', 'commit': 'validated-bbk'}
+        values = {('rev-parse', 'HEAD'): 'validated-bbk', ('branch', '--show-current'): 'personal/stable',
+                  ('rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}'): 'origin/personal/stable',
+                  ('remote', 'get-url', 'origin'): 'https://github.com/SurgeXW0508/baibaoku.git',
+                  ('status', '--porcelain'): ''}
+        self.assertTrue(module.check_baibaoku(expected, lambda *args: values[args])['ok'])
+        values[('remote', 'get-url', 'origin')] = 'https://github.com/baibai-git/baibaoku.git'
+        self.assertFalse(module.check_baibaoku(expected, lambda *args: values[args])['ok'])
+

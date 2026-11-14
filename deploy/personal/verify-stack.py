@@ -68,6 +68,18 @@ def check_tools(expected, query):
             'runtime_tree_matches': tree_matches, 'metadata_only_revision': tree_matches and actual != expected['commit'], 'clean': clean, 'ok': ok}
 
 
+def check_baibaoku(expected, query):
+    actual = query('rev-parse', 'HEAD')
+    clean = query('status', '--porcelain') == ''
+    if 'branch' not in expected:
+        return {'commit': actual, 'clean': clean, 'ok': clean and actual == expected['commit']}
+    branch = query('branch', '--show-current')
+    tracking = query('rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{upstream}')
+    origin = normalized_repository(query('remote', 'get-url', 'origin'))
+    ok = clean and actual == expected['commit'] and branch == expected['branch'] and tracking == f"origin/{expected['branch']}" and origin == expected['repository']
+    return {'commit': actual, 'validated_commit': expected['commit'], 'branch': branch, 'tracking': tracking, 'clean': clean, 'ok': ok}
+
+
 def inspect(manifest, settings, phase, run=command):
     name = settings['container']
     container = json.loads(run('docker', 'inspect', name))[0]
@@ -75,9 +87,7 @@ def inspect(manifest, settings, phase, run=command):
     core = check_core(container, image, manifest['core'], phase)
     query = lambda directory: lambda *args: run('docker', 'exec', name, 'git', '--no-optional-locks', '-C', directory, *args)
     tools = check_tools(manifest['tools'], query(settings['tools_directory']))
-    bbk_query = query(settings['baibaoku_directory'])
-    bbk = {'commit': bbk_query('rev-parse', 'HEAD'), 'clean': bbk_query('status', '--porcelain') == ''}
-    bbk['ok'] = bbk['clean'] and bbk['commit'] == manifest['baibaoku']['commit']
+    bbk = check_baibaoku(manifest['baibaoku'], query(settings['baibaoku_directory']))
     if core['running'] and core['health'] == 'not_configured':
         try:
             run('docker', 'exec', name, 'node', 'src/healthcheck.js')

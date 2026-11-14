@@ -1,16 +1,16 @@
 # Personal Fork 维护与能力归属
 
-Canonical compatibility document。当前正式制品为[v1.19.0-personal.1](https://github.com/SurgeXW0508/SillyTavern/releases/tag/v1.19.0-personal.1)；生产事实与待补项见[PRODUCTION_BASELINE.json](PRODUCTION_BASELINE.json)。涉及ST、Personal Fork、柏宝箱、柏宝库、Shalistera引入的任务，开始前必须阅读本文件，完成Capability Ownership Review；其他任务书或未来插件Fork只引用本文件，不复制冲突矩阵。
+Canonical compatibility document。当前线上已部署正式制品为[v1.19.0-personal.1](https://github.com/SurgeXW0508/SillyTavern/releases/tag/v1.19.0-personal.1)，待实机切换的新一期正式制品为[v1.19.0-personal.2](https://github.com/SurgeXW0508/SillyTavern/releases/tag/v1.19.0-personal.2)；生产事实与待补项见[PRODUCTION_BASELINE.json](PRODUCTION_BASELINE.json)。涉及ST、Personal Fork、柏宝箱、柏宝库、Shalistera引入的任务，开始前必须阅读本文件，完成Capability Ownership Review；其他任务书或未来插件Fork只引用本文件，不复制冲突矩阵。
 
 ## 接手入口与当前生产状态
 
 先读[Production Baseline](PRODUCTION_BASELINE.json)确认实际部署，再对照本文Owner规则，最后按[Release Operations](PERSONAL_RELEASE_OPERATIONS.md)执行对应更新；正式镜像的实际验收范围见[Release Closeout](RELEASE_CLOSEOUT.md)。无需从历史聊天恢复当前版本。
 
-2026-11-12用户提供的NAS结果：`v1.19.0-personal.1`正式GHCR Digest仍在使用；容器`sillytavern`状态为`running`、RestartCount为0。Compose由飞牛 OS 管理，项目`sillytavern`，工作目录`/vol3/1000/SillyTavern`，配置文件`/vol3/1000/SillyTavern/docker-compose.yml`。NAS Tools仍为`personal/stable@2f6a9c54`、origin为个人Fork、tracking为`origin/personal/stable`、工作区clean。NAS BaiBaoKu 已于2026-11-12完成Git跟踪关系整理：当前分支`personal/stable`，跟踪`origin/personal/stable`，origin为个人Fork，upstream为原作者，工作区clean；NAS当前Git HEAD `4814830f`，Runtime基线仍为`b211a4e9`/0.7.3，另有`backup/pre-personal-stable-20261112`备份分支。后续Runbook文档提交使远端stable继续前进；更新前应fetch并按文档差异判断，不要将文档HEAD误认为Runtime变化。完整SHA、Digest和挂载路径以Production Baseline与Release Operations为准。
+2026-11-12用户提供的NAS结果：`v1.19.0-personal.1`正式GHCR Digest仍在使用；容器`sillytavern`状态为`running`、RestartCount为0。Compose由飞牛 OS 管理，项目`sillytavern`，工作目录`<NAS_ST_COMPOSE_DIR>`，配置文件`<NAS_ST_COMPOSE_DIR>/docker-compose.yml`。NAS Tools仍为`personal/stable@2f6a9c54`、origin为个人Fork、tracking为`origin/personal/stable`、工作区clean。NAS BaiBaoKu 已于2026-11-12完成Git跟踪关系整理：当前分支`personal/stable`，跟踪`origin/personal/stable`，origin为个人Fork，upstream为原作者，工作区clean；NAS当前Git HEAD `4814830f`，Runtime基线仍为`b211a4e9`/0.7.3，另有`backup/pre-personal-stable-20261112`备份分支。后续Runbook文档提交使远端stable继续前进；更新前应fetch并按文档差异判断，不要将文档HEAD误认为Runtime变化。完整SHA、Digest和挂载路径以Production Baseline与Release Operations为准。
 
-正式镜像仅确认启动、Health、Vertex普通RP正文生成、刷新后聊天记录保留。Candidate的多轮、Stop、Regenerate等历史结果单独保留，不自动算作正式镜像已验证。飞牛GUI方案与仅局域网/Tailscale自用访问边界已确认结案，Backrest不再挂Pending，旧回滚镜像与临时目录保留边界见Operations。
+正式镜像仅确认启动、Health、Vertex普通RP正文生成、刷新后聊天记录保留。Candidate的多轮、Stop、Regenerate等历史结果单独保留，不自动算作正式镜像已验证。飞牛GUI方案与仅内网/专用组网自用访问边界已确认结案，Backrest不再挂Pending，旧回滚镜像与临时目录保留边界见Operations。
 
-2026-11-12至2026-11-14阶段性仓库状态：Vertex协议契约、封闭枚举诊断、多媒体共享凭据域名守卫与流式/重放收尾（Runtime `e49a6940`）、三仓库世界书性能优化与能力归属收敛（Runtime `e92f8dc4` / 柏宝箱 `3314098e` / 柏宝库 `61aae569`）、柏宝箱 `1.2.0`（内置柏宝砚）+ 柏宝库 `0.7.4` 同步与三项代码层 Pending Ownership 全量收口（阶段 Runtime `5c02da4f`、柏宝箱 `personal/stable@595854eeaf36fc05ecd380639d3013048693c768` / Runtime `1e8d5a818e19c7deafee42808aa39033c25170a1`、柏宝库 `personal/stable@2ba8864fa6b16cb425c05b6c66b4fefbfb5fd64c` / Runtime `e9d95265c77187446177e839a2b97975ebb2aa0d`），以及用户授权的 Shalistera Core 性能二次吸收（ST `release@8781e17923ef399682c5af89a39174417fbf6e4c` 阶段 Runtime `28797486d97375ddefa49f978390c88f1eb083fd`）已全部快进合入各自稳定主路并清理已合入临时分支；当前候选分支 `stage/vertex-gemini4-models`（Runtime `dd3d522b73848dad7cba64625750c68b2ceb17d5`）完成 Vertex `gemini-4-carbon` / `gemini-4-hydrogen` 型号能力表接入与采样/惩罚/`seed` 忽略提示策略对齐，待用户审阅确认合入 `release`。暂未修改 `personal-release.json`、暂未构建新 GHCR 镜像或更新 NAS，线上生产仍为 `v1.19.0-personal.1`（ST Runtime `090cbba6d40e5d117ab41a9e6deb20b40e2dc336`、Tools `2f6a9c54`、BaiBaoKu `4814830f` / Runtime `b211a4e9`），待用户明确授权后统一发布正式镜像与实机切换。
+2026-11-12至2026-11-14阶段性仓库与发布状态：Vertex协议契约、封闭枚举诊断、多媒体共享凭据域名守卫与流式/重放收尾（Runtime `e49a6940`）、三仓库世界书性能优化与能力归属收敛（Runtime `e92f8dc4` / 柏宝箱 `3314098e` / 柏宝库 `61aae569`）、柏宝箱 `1.2.0`（内置柏宝砚）+ 柏宝库 `0.7.4` 同步与三项代码层 Pending Ownership 全量收口（阶段 Runtime `5c02da4f`、柏宝箱 `personal/stable@84345b9ac394a093bb89d8251ab197335f8f0b5b` / Runtime `1e8d5a818e19c7deafee42808aa39033c25170a1`、柏宝库 `personal/stable@0f8bd4d167713234ed2b9a56a62b4b37bcaea610` / Runtime `e9d95265c77187446177e839a2b97975ebb2aa0d`）、Shalistera Core 性能二次吸收（阶段 Runtime `28797486`），以及 Vertex `gemini-4-carbon` / `gemini-4-hydrogen` 能力表、`prefixMismatchBehavior: 'DROP'` 签名重放守卫与默认 `v1beta1` 路由（冻结 Runtime `9817c0e6de8647f6519b5cc2fc583df3070c4053`）已全部快进合入各自稳定主路、清理全部已合入临时分支，并统一发布 `v1.19.0-personal.2` 正式 GHCR 镜像与 `validated-stack.json`。线上生产在用户完成实机切换前仍记录为 `v1.19.0-personal.1`（ST Runtime `090cbba6d40e5d117ab41a9e6deb20b40e2dc336`、Tools `2f6a9c54`、BaiBaoKu `4814830f` / Runtime `b211a4e9`）。
 
 Decision Log、SH取舍索引及C-E0交接是对应阶段的历史证据。已发布Release资产中的compatibility是发布时快照，不修改其内容来补填后续实机结果；当前生产事实更新在Production Baseline。
 
@@ -191,7 +191,7 @@ Phase C-D 当时五项可靠性修复与性能优化解耦落地；随后于 202
 
 ## Phase C Code Freeze
 
-**当前状态：Phase C Code Freeze，2026-11-09正式登记。** 当前发布入口见[Personal Release Operations](PERSONAL_RELEASE_OPERATIONS.md)，差异结论见[Final Delta Audit](FINAL_DELTA_AUDIT.md)。 根据用户在Phase C-E0任务中确认，Phase C-D已经通过独立审查；本次登记不是Work自审替代独立审查。Candidate阶段曾报告多轮、刷新后继续、Stop、Regenerate等通过。当前正式GHCR镜像已完成NAS切换及基本验收，Image ID、healthy/RestartCount与两插件实际SHA已登记；正式镜像未复验能力按需在对应功能变动时补验（启动日志`listen`/私网过滤告警已于2026-11-13经用户确认仅LAN+Tailscale自用无公网暴露归档结案，Backrest未启用并移出待办）。
+**当前状态：Phase C Code Freeze，2026-11-09正式登记。** 当前发布入口见[Personal Release Operations](PERSONAL_RELEASE_OPERATIONS.md)，差异结论见[Final Delta Audit](FINAL_DELTA_AUDIT.md)。 根据用户在Phase C-E0任务中确认，Phase C-D已经通过独立审查；本次登记不是Work自审替代独立审查。Candidate阶段曾报告多轮、刷新后继续、Stop、Regenerate等通过。当前正式GHCR镜像已完成NAS切换及基本验收，Image ID、healthy/RestartCount与两插件实际SHA已登记；正式镜像未复验能力按需在对应功能变动时补验（启动日志`listen`/私网过滤告警已于2026-11-13经用户确认仅内网/专用组网自用无公网暴露归档结案，Backrest未启用并移出待办）。
 
 | Frozen component | Branch / source | 精确SHA |
 | --- | --- | --- |
@@ -274,7 +274,7 @@ Owner Review：本轮只改变维护记录和交接文档，没有能力实现�
 
 ### NAS更新入口
 
-柏宝库位于独立挂载目录`/vol3/1000/SillyTavern/plugins/baibaoku`（容器内`/home/node/app/plugins/baibaoku`），不在ST镜像内。更新它不需要重新构建Docker镜像，但必须重启SillyTavern Server。
+柏宝库位于独立挂载目录`<NAS_ST_COMPOSE_DIR>/plugins/baibaoku`（容器内`/home/node/app/plugins/baibaoku`），不在ST镜像内。更新它不需要重新构建Docker镜像，但必须重启SillyTavern Server。
 
 一次性完成NAS remote/branch整理后，日常更新通过飞牛Docker图形界面打开`sillytavern`容器终端，先核验工作区、origin和当前分支，再定向执行：
 
@@ -398,7 +398,7 @@ Merged Milestone Status：三仓库代码修复、三轮审查收尾（`S1–S2`
 Scope & Mirror Fast-Forward：
 
 - `SurgeXW0508/ST-BaiBai-Tools:main` 快进同步至 `baibai-git/ST-BaiBai-Tools@d828d6812994414cef24be9e5f995a264e9fe370`（`1.2.0`）；`SurgeXW0508/baibaoku:main` 快进同步至 `baibai-git/baibaoku@d915bc8f0036fb308f02b9a9e52ae880f05d4fe4`（`0.7.4`）。
-- 在三库候选分支完成内置柏宝砚三轮外部复核边界修复 + 内部质量自审（`P-1`–`P-6`）+ 合入前终论审查根因闭环（`B1` + `S1`–`S11` + 三轮复核两项落盘正确性闭环及分支/检查点有界等锁收口），从宏观架构层面一次性收口全部三项代码层 `Pending Ownership Review`（运维侧 `Backrest` 演练移出 `pending`、启动日志 `listen` 告警按 LAN + Tailscale 自用归档结案），并按用户授权快进合入稳定主路（`SillyTavern:release` 阶段 Runtime `5c02da4f1bf865dce85558f14bcbd91f949f823a`、`ST-BaiBai-Tools:personal/stable@595854eeaf36fc05ecd380639d3013048693c768` / Runtime `1e8d5a818e19c7deafee42808aa39033c25170a1`、`baibaoku:personal/stable@2ba8864fa6b16cb425c05b6c66b4fefbfb5fd64c` / Runtime `e9d95265c77187446177e839a2b97975ebb2aa0d`），核验 `0 ahead` 后已删除全部已合入临时分支。
+- 在三库候选分支完成内置柏宝砚三轮外部复核边界修复 + 内部质量自审（`P-1`–`P-6`）+ 合入前终论审查根因闭环（`B1` + `S1`–`S11` + 三轮复核两项落盘正确性闭环及分支/检查点有界等锁收口），从宏观架构层面一次性收口全部三项代码层 `Pending Ownership Review`（运维侧 `Backrest` 演练移出 `pending`、启动日志 `listen` 告警按内网/专用组网自用归档结案），并按用户授权快进合入稳定主路（`SillyTavern:release` 阶段 Runtime `5c02da4f1bf865dce85558f14bcbd91f949f823a`、`ST-BaiBai-Tools:personal/stable@595854eeaf36fc05ecd380639d3013048693c768` / Runtime `1e8d5a818e19c7deafee42808aa39033c25170a1`、`baibaoku:personal/stable@2ba8864fa6b16cb425c05b6c66b4fefbfb5fd64c` / Runtime `e9d95265c77187446177e839a2b97975ebb2aa0d`），核验 `0 ahead` 后已删除全部已合入临时分支。
 
 Decision & Capability Ownership Review：
 
@@ -465,7 +465,7 @@ Verification & Measured Timing Evidence：
   - **C2 千层聊天角色标签 DOM 查询**（1,000 层 `#chat > .mes` 目标过滤，Chromium 实测）：`47.7ms → 0.3ms`（**-99.4%**，159×）。
 - **Merged Milestone Status**：上述代码与修正后的文档已按用户授权快进合入 `SillyTavern:release`（阶段 Runtime `28797486d97375ddefa49f978390c88f1eb083fd`）并在核验 `0 ahead` 后清理临时分支 `stage/core-perf-intake`；`personal-release.json`、`PRODUCTION_BASELINE.json` 的 `current_production`、GHCR 镜像与 NAS 生产环境均保持未动。
 
-### 2026-11-14 Vertex `gemini-4-carbon` / `gemini-4-hydrogen` 接入、参数忽略与前缀变化思考签名重放加固（候选分支 `stage/vertex-gemini4-models`）
+### 2026-11-14 Vertex `gemini-4-carbon` / `gemini-4-hydrogen` 接入、参数忽略与前缀变化思考签名重放加固（合入 `release` 并进入 `v1.19.0-personal.2`）
 
 Capability Ownership Review & Boundary Verification：
 
@@ -481,10 +481,16 @@ Capability Ownership Review & Boundary Verification：
   - 凡静默处理会改变语义、计费或数据边界的冲突（`n > 1`、`logprobs`/`logit_bias`、非法区域、`4A`/`4C` 选 `Flex`、`v1` 超单段上限、非 `Continue` 助手预填、`request_images`、`thinkingBudget`）继续维持 `VERTEX_CONFIG` `400` 显式报错。
 - **面板选项与文案**（[`public/index.html`](../../public/index.html)）：在 `#model_vertexai_select` 的 `Gemini 4` 分组按新型号优先顺序提供 `gemini-4-hydrogen`、`gemini-4-carbon`、`gemini-4-argon`（默认型号不变），将 `Flex` 标注为 `Flex（较慢，4A / 4C 不支持，4H 待实机核验）`、`API 版本 = auto` 标注为 `自动（Gemini 4 使用 v1beta1）`，并将原写死 `Argon` 的提示更新为准确的 Gemini 4 家族说明。
 
-Candidate Implementation & Verification（`stage/vertex-gemini4-models`，基于 `release@8781e17923ef399682c5af89a39174417fbf6e4c`）：
+Merged & Release Verification（`v1.19.0-personal.2`，冻结 Runtime `9817c0e6de8647f6519b5cc2fc583df3070c4053`）：
 
 - Runtime & 单测提交：
   - `dd3d522b73848dad7cba64625750c68b2ceb17d5` — `feat(vertex): add Gemini 4 Carbon/Hydrogen via per-model capability profiles`
   - `9817c0e6de8647f6519b5cc2fc583df3070c4053` — `fix(vertex): drop prefix-mismatched Gemini 4 thought signatures on replay`
-- 全套验证结果：根目录 `npm run lint` 与 `tests` `npm run lint` 0 错误；`tests` `npm run test:unit` **24/24 套件（437 项）**全绿；`npm run test:vertex` **42/42**（含 `4A`/`4C`/`4H`/未知 `gemini-4-foo` 在系统提示/世界书变化、上下文裁剪、工具列表变更与 `CONTINUATION` 续传下的 `prefixMismatchBehavior=DROP` 签名重放，以及本条被后处理改写时的脏签名剥离回归单测）、`npm run test:reliability` **17/17**、`release.node.mjs` **13/13**、`test_stack.py` **4/4** 全绿；Playwright `VertexNative.e2e.js` + `ReasoningLifecycle.e2e.js` **22/22** 全绿；柏宝库 `14 + 3 + 19` 项与柏宝箱 `17 + 139` 项及 `vue-tsc` 全绿；隔离三库 Chromium 联跑实测 `gemini-4-hydrogen` 第 1 轮生成后修改角色设定与前序消息再发第 2 轮，原签名保留且请求体携带 `prefixMismatchBehavior: "DROP"`，切到 `gemini-4-carbon` 跨模型自动剥离旧签名，全程 `pageerror = 0`、`http500s = 0`、Save Generate 请求数 `= 0`。
-- **Candidate Status**：当前提交位于候选分支 `stage/vertex-gemini4-models`；`release` 分支、`personal-release.json`、`PRODUCTION_BASELINE.json` 的 `current_production`、GHCR 镜像与 NAS 生产环境均保持未动，真实 Google API 对 `prefixMismatchBehavior = 'DROP'` 与 `4H Flex` 的线上实测留待部署阶段核验。
+- 全套验证结果：根目录 `npm run lint` 与 `tests` `npm run lint` 0 错误；`tests` `npm run test:unit` **24/24 套件（437 项）**全绿；`npm run test:vertex` **42/42**、`npm run test:reliability` **17/17**、`release.node.mjs` **13/13**、`test_stack.py` **5/5**（新增柏宝库 `origin`/`personal/stable` 跟踪核验）全绿；Playwright `VertexNative.e2e.js` + `ReasoningLifecycle.e2e.js` **22/22** 全绿；柏宝库 `14 + 3 + 19` 项与柏宝箱 `17 + 139` 项及 `vue-tsc` 全绿；隔离三库 Chromium 联跑实测全绿（`pageerror = 0`、`http500s = 0`、Save Generate 请求数 `= 0`）。
+- **与原版酒馆 / 上游柏系列的已知有意行为差异汇总**（发版前终审确认）：
+  1. 流式中断/报错时，如已收到可用正文或思考片段，所有渠道统一通过 `finalizeIntermediaryMessage` 保留并落盘已收内容（防丢字；代价是监听 `MESSAGE_RECEIVED` 的 TTS/翻译等扩展也会收到该截断消息）。
+  2. 世界书干跑（`isDryRun=true`，如预览/Token 估算）不触发 `WORLDINFO_ENTRIES_LOADED` / `WORLDINFO_SCAN_DONE` 事件，消除与柏宝箱监听器的递归刷新环。
+  3. Google AI Studio 流式解析现拼接同帧全部文本 `parts` 并从非工具 `part` 提取思考签名（修复原版仅取首个 `part` 的截断问题）。
+  4. 柏宝箱默认开启「减少加载楼层」（`chat_truncation = 10`，仅限首屏 DOM，上滑正常加载旧楼层）与预设备份总上限 `200` 份（加备注的备份永久豁免）；Save Generate 固定不装配。
+  5. 柏宝库 `/v1/characters/fast-all` 按 `characters/` 目录 `mtimeMs` 判定重扫，NAS/SMB 原地覆盖同名 PNG 需增删一次文件或切换一次开关刷新；扩展管理接管默认开启，更新柏宝箱时严禁点击“强制更新”。
+- **Merged & Published Status**：经终审无阻断项，按用户授权将 `stage/vertex-gemini4-models` 快进合入 `SillyTavern:release` 并在核验 `0 ahead` 后删除候选分支，同步更新 `personal-release.json` 发布 `v1.19.0-personal.2`（配对 `ST-BaiBai-Tools:personal/stable@84345b9ac394a093bb89d8251ab197335f8f0b5b` 与 `baibaoku:personal/stable@0f8bd4d167713234ed2b9a56a62b4b37bcaea610`）；真实 Google API 对 `prefixMismatchBehavior = 'DROP'` 与 `4H Flex` 的线上实测随用户 NAS 部署验收一并确认。

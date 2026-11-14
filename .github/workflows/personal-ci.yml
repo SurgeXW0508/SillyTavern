@@ -1,7 +1,7 @@
 name: Personal Core CI
 on:
   push:
-    branches: [stage/vertex-native-generation-contract]
+    branches: ['stage/**']
   pull_request:
     branches: [release]
     types: [opened, synchronize, reopened]
@@ -29,6 +29,8 @@ jobs:
       - run: node scripts/personal/release.mjs check
       - name: Verify frozen Tools policy independently
         run: |
+          TOOLS_COMMIT=$(node -p "require('./personal-release.json').tools.commit")
           git clone --no-checkout https://github.com/SurgeXW0508/ST-BaiBai-Tools.git "$RUNNER_TEMP/personal-tools"
-          git -C "$RUNNER_TEMP/personal-tools" checkout --detach 2f6a9c54d2c906b4a0e44d20c12d0712552e393d
+          git -C "$RUNNER_TEMP/personal-tools" checkout --detach "$TOOLS_COMMIT"
+          npm ci --ignore-scripts --prefix "$RUNNER_TEMP/personal-tools"
           npm run test:personal-stable --prefix "$RUNNER_TEMP/personal-tools"

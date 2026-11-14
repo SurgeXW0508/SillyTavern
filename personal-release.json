@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
-  "version": "1.19.0-personal.1",
-  "tag": "v1.19.0-personal.1",
-  "runtime_commit": "090cbba6d40e5d117ab41a9e6deb20b40e2dc336",
+  "version": "1.19.0-personal.2",
+  "tag": "v1.19.0-personal.2",
+  "runtime_commit": "9817c0e6de8647f6519b5cc2fc583df3070c4053",
   "official_upstream": {
     "repository": "SillyTavern/SillyTavern",
     "branch": "release",
@@ -12,31 +12,34 @@
   "tools": {
     "repository": "SurgeXW0508/ST-BaiBai-Tools",
     "branch": "personal/stable",
-    "commit": "2f6a9c54d2c906b4a0e44d20c12d0712552e393d",
-    "runtime_tree_sha256": "0299cdd91d620e177b1d4ee492988b5ada600f591be35110f84065f0ababce2c",
+    "commit": "84345b9ac394a093bb89d8251ab197335f8f0b5b",
+    "runtime_commit": "1e8d5a818e19c7deafee42808aa39033c25170a1",
+    "version": "1.2.0",
+    "runtime_tree_sha256": "ad8bb472e64362e499e983bf4279c462493ba0d546fa4d16072b7ddbea723725",
     "excluded_document": "AGENTS.md",
     "save_generate": "not_assembled"
   },
   "baibaoku": {
-    "repository": "baibai-git/baibaoku",
-    "commit": "b211a4e97fdaec24dc8b90c85ddc198fac9ac200",
-    "version": "0.7.3"
+    "repository": "SurgeXW0508/baibaoku",
+    "branch": "personal/stable",
+    "commit": "0f8bd4d167713234ed2b9a56a62b4b37bcaea610",
+    "runtime_commit": "e9d95265c77187446177e839a2b97975ebb2aa0d",
+    "version": "0.7.4"
   },
   "acceptance": {
-    "source": "user_report_2026-11-09",
-    "candidate_runtime": "090cbba6d40e5d117ab41a9e6deb20b40e2dc336",
+    "source": "automated_ci_and_3repo_chromium_verification_2026-11-14",
+    "candidate_runtime": "9817c0e6de8647f6519b5cc2fc583df3070c4053",
     "passed": [
-      "vertex_rp",
-      "multi_turn",
-      "refresh_then_generate",
-      "stop",
-      "regenerate"
+      "vertex_native_unit_and_http_42_of_42",
+      "core_reliability_17_of_17",
+      "jest_unit_24_suites_437_tests",
+      "playwright_vertex_and_reasoning_e2e_22_of_22",
+      "triad_chromium_e2e_gemini4_hydrogen_carbon_replay_and_bridges"
     ],
     "not_reported": [
-      "swipe",
-      "continue",
-      "tool_call_real_model",
-      "non_vertex_smoke",
+      "live_google_gemini4_prefix_mismatch_drop",
+      "live_google_hydrogen_flex",
+      "formal_nas_smoke",
       "candidate_image_id",
       "container_health",
       "restart_count",
