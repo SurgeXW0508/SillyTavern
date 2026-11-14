@@ -14,6 +14,7 @@ import {
     saveItemizedPrompts,
     setActiveGroup,
     getCurrentChatDetails,
+    withChatSaveLock,
 } from '../script.js';
 import { humanizedDateTime } from './RossAscends-mods.js';
 import {
@@ -47,12 +48,60 @@ import {
 const bookmarkNameToken = 'Checkpoint #';
 
 /**
- * Gets the names of existing chats for the current character or group.
+ * Captures the active solo character or group session and metadata synchronously
+ * before any async boundary so branch/checkpoint persistence remains bound to
+ * its origin session even if the active chat changes mid-flight.
+ */
+function captureBookmarkOriginContext() {
+    const groupId = selected_group || null;
+    const group = groupId ? (groups.find(x => x.id == groupId) ?? null) : null;
+    const hasCharacter = !groupId && this_chid !== undefined;
+    const character = hasCharacter ? (characters[this_chid] ?? null) : null;
+    const avatar = character?.avatar;
+    const sessionName = groupId
+        ? (group?.chat_id ?? '')
+        : (character?.chat ?? (getCurrentChatDetails()).sessionName ?? '');
+
+    let baseMetadata;
+    try {
+        baseMetadata = structuredClone(chat_metadata ?? {});
+    } catch {
+        baseMetadata = { ...(chat_metadata ?? {}) };
+    }
+
+    const isStillActive = () => {
+        if (groupId) {
+            const currentGroup = selected_group ? groups.find(x => x.id == selected_group) : null;
+            return selected_group === groupId && (currentGroup?.chat_id ?? '') === sessionName;
+        }
+        const currentHasCharacter = !selected_group && this_chid !== undefined;
+        const currentCharacter = currentHasCharacter ? characters[this_chid] : null;
+        return currentHasCharacter
+            && currentCharacter?.avatar === avatar
+            && (currentCharacter?.chat ?? '') === sessionName;
+    };
+
+    return {
+        groupId,
+        group,
+        hasCharacter,
+        character,
+        avatar,
+        sessionName,
+        baseMetadata,
+        isStillActive,
+    };
+}
+
+/**
+ * Gets the names of existing chats for the current or pre-bound character/group.
+ * @param {ReturnType<typeof captureBookmarkOriginContext>|null} [originContext=null]
  * @returns {Promise<string[]>} - Returns a promise that resolves to an array of existing chat names.
  */
-async function getExistingChatNames() {
-    if (selected_group) {
-        const group = groups.find(x => x.id == selected_group);
+async function getExistingChatNames(originContext = null) {
+    const targetGroupId = originContext ? originContext.groupId : selected_group;
+    if (targetGroupId) {
+        const group = originContext?.group ?? groups.find(x => x.id == targetGroupId);
         if (group && Array.isArray(group.chats)) {
             return [...group.chats];
         }
@@ -60,12 +109,10 @@ async function getExistingChatNames() {
         return [];
     }
 
-    if (this_chid === undefined) {
-        return [];
-    }
-
-    const character = characters[this_chid];
-    if (!character) {
+    const character = originContext
+        ? originContext.character
+        : (this_chid !== undefined ? characters[this_chid] : null);
+    if (!character?.avatar) {
         return [];
     }
 
@@ -84,8 +131,8 @@ async function getExistingChatNames() {
     return [];
 }
 
-async function getBookmarkName({ isReplace = false, forceName = null } = {}) {
-    const mainChatName = (getCurrentChatDetails()).sessionName;
+async function getBookmarkName({ isReplace = false, forceName = null, originContext = null } = {}) {
+    const mainChatName = originContext ? originContext.sessionName : (getCurrentChatDetails()).sessionName;
 
     function buildCheckpointName(name, i) {
         // Strip off existing suffixes, then build new name
@@ -94,7 +141,7 @@ async function getBookmarkName({ isReplace = false, forceName = null } = {}) {
         cleanName = cleanName.replace(new RegExp(`^${bookmarkNameToken}\\d+ - `), '');
         return `${cleanName} - ${bookmarkNameToken}${i}`;
     }
-    const existingChats = await getExistingChatNames();
+    const existingChats = await getExistingChatNames(originContext);
     const suggestedName = getUniqueName(mainChatName, (x) => existingChats.includes(x), { nameBuilder: buildCheckpointName, startIndex: 1 });
 
     const body = await renderTemplateAsync('createCheckpoint', { isReplace: isReplace, suggestedName: suggestedName });
@@ -195,29 +242,18 @@ export async function createBranch(mesId, { swipeId = null } = {}) {
         return;
     }
 
+    const originContext = captureBookmarkOriginContext();
+    if (!originContext.groupId && !originContext.character) {
+        toastr.info('No character selected.', 'Branch creation failed');
+        return;
+    }
+
     const lastMes = chat[mesId];
-    const mainChatName = (getCurrentChatDetails()).sessionName;
-    // Mint a fresh integrity slug so the branch is distinguishable from its parent (#5942)
-    const newMetadata = { main_chat: mainChatName, integrity: uuidv4() };
+    const mainChatName = originContext.sessionName;
     const selectedSwipeId = swipeId === null ? null : Number(swipeId);
 
     if (selectedSwipeId !== null && (!Number.isInteger(selectedSwipeId) || selectedSwipeId < 0 || selectedSwipeId >= (lastMes?.swipes?.length ?? 0))) {
         toastr.warning('Invalid swipe ID.', 'Branch creation failed');
-        return;
-    }
-
-    function buildBranchName(name, i) {
-        // Strip off existing suffixes, then build new name
-        let cleanName = name.replace(/ - Branch #\d+$/, '');
-        // Strip off legacy old name prefix too
-        cleanName = cleanName.replace(/^Branch #\d+ - /, '');
-        return `${cleanName} - Branch #${i}`;
-    }
-    const existingChats = await getExistingChatNames();
-    const name = getUniqueName(mainChatName, (x) => existingChats.includes(x), { nameBuilder: buildBranchName, startIndex: 1 });
-    if (!name) {
-        console.error('Could not generate a unique branch name.');
-        toastr.error('Could not generate a unique branch name.', 'Branch creation failed');
         return;
     }
 
@@ -227,11 +263,45 @@ export async function createBranch(mesId, { swipeId = null } = {}) {
         return;
     }
 
-    if (selected_group) {
-        await saveGroupBookmarkChat(selected_group, name, newMetadata, mesId, branchChatSnapshot);
-    } else {
-        await saveChat({ chatName: name, withMetadata: newMetadata, mesId, chatData: branchChatSnapshot });
+    // Mint a fresh integrity slug so the branch is distinguishable from its parent (#5942)
+    const newMetadata = { main_chat: mainChatName, integrity: uuidv4() };
+
+    function buildBranchName(name, i) {
+        // Strip off existing suffixes, then build new name
+        let cleanName = name.replace(/ - Branch #\d+$/, '');
+        // Strip off legacy old name prefix too
+        cleanName = cleanName.replace(/^Branch #\d+ - /, '');
+        return `${cleanName} - Branch #${i}`;
     }
+
+    const lockResult = await withChatSaveLock(async () => {
+        const existingChats = await getExistingChatNames(originContext);
+        const branchName = getUniqueName(mainChatName, (x) => existingChats.includes(x), { nameBuilder: buildBranchName, startIndex: 1 });
+        if (!branchName) {
+            console.error('Could not generate a unique branch name.');
+            toastr.error('Could not generate a unique branch name.', 'Branch creation failed');
+            return null;
+        }
+
+        const saved = originContext.groupId
+            ? await saveGroupBookmarkChat(originContext.groupId, branchName, newMetadata, mesId, branchChatSnapshot, originContext.baseMetadata)
+            : await saveChat({
+                chatName: branchName,
+                withMetadata: newMetadata,
+                mesId,
+                chatData: branchChatSnapshot,
+                targetCharacter: originContext.character,
+                baseMetadata: originContext.baseMetadata,
+            });
+
+        return saved ? branchName : null;
+    });
+
+    const name = lockResult.acquired ? lockResult.value : null;
+    if (!name) {
+        return;
+    }
+
     // append to branches list if it exists
     // otherwise create it
     if (typeof lastMes.extra !== 'object') {
@@ -266,7 +336,9 @@ export async function createNewBookmark(mesId, { forceName = null } = {}) {
         return null;
     }
 
+    const originContext = captureBookmarkOriginContext();
     const lastMes = chat[mesId];
+    const checkpointSnapshot = structuredClone(chat.slice(0, Number(mesId) + 1));
 
     if (typeof lastMes.extra !== 'object') {
         lastMes.extra = {};
@@ -274,28 +346,42 @@ export async function createNewBookmark(mesId, { forceName = null } = {}) {
 
     const isReplace = lastMes.extra.bookmark_link;
 
-    let name = await getBookmarkName({ isReplace: isReplace, forceName: forceName });
+    let name = await getBookmarkName({ isReplace: isReplace, forceName: forceName, originContext });
     if (!name) {
         return null;
     }
 
-    const mainChat = selected_group ? groups?.find(x => x.id == selected_group)?.chat_id : characters[this_chid].chat;
+    const mainChat = originContext.sessionName;
     // Mint a fresh integrity slug so the checkpoint is distinguishable from its parent (#5942)
     const newMetadata = { main_chat: mainChat, integrity: uuidv4() };
-    await saveItemizedPrompts(name);
+    if (originContext.isStillActive()) {
+        await saveItemizedPrompts(name);
+    }
 
-    if (selected_group) {
-        await saveGroupBookmarkChat(selected_group, name, newMetadata, mesId);
-    } else {
-        await saveChat({ chatName: name, withMetadata: newMetadata, mesId });
+    const lockResult = await withChatSaveLock(async () => {
+        return originContext.groupId
+            ? await saveGroupBookmarkChat(originContext.groupId, name, newMetadata, mesId, checkpointSnapshot, originContext.baseMetadata)
+            : await saveChat({
+                chatName: name,
+                withMetadata: newMetadata,
+                mesId,
+                chatData: checkpointSnapshot,
+                targetCharacter: originContext.character,
+                baseMetadata: originContext.baseMetadata,
+            });
+    });
+
+    if (!lockResult.acquired || !lockResult.value) {
+        return null;
     }
 
     lastMes.extra.bookmark_link = name;
 
-    const mes = $(`.mes[mesid="${mesId}"]`);
-    updateBookmarkDisplay(mes, name);
-
-    await saveChatConditional();
+    if (originContext.isStillActive()) {
+        const mes = $(`.mes[mesid="${mesId}"]`);
+        updateBookmarkDisplay(mes, name);
+        await saveChatConditional();
+    }
     toastr.success('Click the flag icon next to the message to open the checkpoint chat.', 'Create Checkpoint', { timeOut: 10000 });
     return name;
 }
@@ -455,15 +541,20 @@ export async function branchChat(mesId, { swipeId = null } = {}) {
         return null;
     }
 
+    const originContext = captureBookmarkOriginContext();
     const fileName = await createBranch(mesId, { swipeId });
     if (!fileName) {
         return null;
     }
 
+    if (!originContext.isStillActive()) {
+        return fileName;
+    }
+
     await saveItemizedPrompts(fileName);
 
-    if (selected_group) {
-        await openGroupChat(selected_group, fileName);
+    if (originContext.groupId) {
+        await openGroupChat(originContext.groupId, fileName);
     } else {
         await openCharacterChat(fileName);
     }

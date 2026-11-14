@@ -48,6 +48,306 @@ async function invokeHandler(handler, request) {
     return { statusCode, payload };
 }
 
+function extractJsFunction(src, marker) {
+    const start = src.indexOf(marker);
+    if (start < 0) {
+        throw new Error(`Marker not found: ${marker}`);
+    }
+    const openParen = src.indexOf('(', start);
+    let parenDepth = 0;
+    let bodyStart = -1;
+    for (let i = openParen; i < src.length; i++) {
+        if (src[i] === '(') {
+            parenDepth += 1;
+        } else if (src[i] === ')') {
+            parenDepth -= 1;
+            if (parenDepth === 0) {
+                bodyStart = src.indexOf('{', i);
+                break;
+            }
+        }
+    }
+    if (bodyStart <= openParen) {
+        throw new Error(`Body start not found for: ${marker}`);
+    }
+    let depth = 0;
+    for (let i = bodyStart; i < src.length; i++) {
+        const ch = src[i];
+        if (ch === '{') {
+            depth += 1;
+        } else if (ch === '}') {
+            depth -= 1;
+            if (depth === 0) {
+                const raw = src.slice(start, i + 1);
+                return raw.startsWith('export ') ? raw.slice('export '.length) : raw;
+            }
+        }
+    }
+    throw new Error(`Failed to extract ${marker}`);
+}
+
+async function createChatSaveVmHarness() {
+    const scriptPath = fileURLToPath(new URL('../public/script.js', import.meta.url));
+    const scriptSource = fs.readFileSync(scriptPath, 'utf8');
+    const saveChatCode = extractJsFunction(scriptSource, 'export async function saveChat(');
+    const withChatSaveLockCode = extractJsFunction(scriptSource, 'export async function withChatSaveLock(');
+    const saveChatConditionalCode = extractJsFunction(scriptSource, 'export async function saveChatConditional(');
+
+    const state = {
+        chat: [{ mes: 'Alice edited floor' }],
+        selected_group: null,
+        /** @type {number|string|undefined} */
+        this_chid: '1',
+        characters: [
+            { avatar: 'Zoe.png', chat: 'zoe-main', name: 'Zoe' },
+            { avatar: 'Alice.png', chat: 'main', name: 'Alice' },
+            { avatar: 'Bob.png', chat: 'main', name: 'Bob' },
+        ],
+        chat_metadata: { integrity: 'hash-a' },
+        name1: 'User',
+        name2: 'Alice',
+        neutralCharacterName: 'System',
+        isChatSaving: false,
+        fetchRequests: [],
+        nextFetchOk: true,
+        customFetchHandler: null,
+        popupHandler: async () => '',
+        tokenCacheSaved: 0,
+        itemizedSaved: [],
+        waitHook: null,
+    };
+
+    const vmModule = await import('node:vm');
+    const context = vmModule.createContext({
+        console: { warn: () => {}, error: () => {}, trace: () => {} },
+        Date,
+        Error,
+        Array,
+        Object,
+        Boolean,
+        Math,
+        JSON,
+        DEFAULT_SAVE_EDIT_TIMEOUT: 1000,
+        get chat() { return state.chat; },
+        get selected_group() { return state.selected_group; },
+        get this_chid() { return state.this_chid; },
+        get characters() { return state.characters; },
+        get chat_metadata() { return state.chat_metadata; },
+        get name1() { return state.name1; },
+        get name2() { return state.name2; },
+        get neutralCharacterName() { return state.neutralCharacterName; },
+        get isChatSaving() { return state.isChatSaving; },
+        set isChatSaving(val) { state.isChatSaving = val; },
+        getCurrentChatId: () => state.selected_group ? 'group-chat' : state.characters[state.this_chid]?.chat,
+        getRequestHeaders: () => ({ 'Content-Type': 'application/json' }),
+        compressRequest: async (req) => req,
+        cancelDebouncedChatSave: () => {},
+        Number,
+        waitUntilCondition: async (cond) => {
+            if (state.waitHook) {
+                await state.waitHook();
+            }
+            if (!cond()) {
+                throw new Error('Timed out');
+            }
+        },
+        fetch: async (url, init) => {
+            if (state.customFetchHandler) {
+                return await state.customFetchHandler(url, init);
+            }
+            state.fetchRequests.push({ url, body: JSON.parse(init.body) });
+            if (state.nextFetchOk) {
+                return { ok: true, status: 200, json: async () => ({ result: 'ok' }) };
+            }
+            return { ok: false, status: 500, json: async () => ({ error: 'disk full' }) };
+        },
+        saveGroupChat: async () => true,
+        saveTokenCache: () => { state.tokenCacheSaved += 1; },
+        saveItemizedPrompts: (id) => { state.itemizedSaved.push(id); },
+        toastr: { error: () => {}, warning: () => {}, info: () => {}, success: () => {} },
+        t: (strings) => Array.isArray(strings) ? strings.join('') : String(strings),
+        Popup: { show: { input: async (...args) => await state.popupHandler(...args) } },
+        window: { location: { reload: () => {} } },
+    });
+
+    vmModule.runInContext(
+        `${saveChatCode}\n${withChatSaveLockCode}\n${saveChatConditionalCode}\nglobalThis.fns = { saveChat, withChatSaveLock, saveChatConditional };`,
+        context,
+    );
+    return { state, fns: context.fns };
+}
+
+async function createBranchAndGroupVmHarness() {
+    const scriptPath = fileURLToPath(new URL('../public/script.js', import.meta.url));
+    const groupChatsPath = fileURLToPath(new URL('../public/scripts/group-chats.js', import.meta.url));
+    const bookmarksPath = fileURLToPath(new URL('../public/scripts/bookmarks.js', import.meta.url));
+    const scriptSource = fs.readFileSync(scriptPath, 'utf8');
+    const groupChatsSource = fs.readFileSync(groupChatsPath, 'utf8');
+    const bookmarksSource = fs.readFileSync(bookmarksPath, 'utf8');
+
+    const saveChatCode = extractJsFunction(scriptSource, 'export async function saveChat(');
+    const withChatSaveLockCode = extractJsFunction(scriptSource, 'export async function withChatSaveLock(');
+    const selectCharacterByIdCode = extractJsFunction(scriptSource, 'export async function selectCharacterById(');
+    const postGroupChatSaveCode = extractJsFunction(groupChatsSource, 'async function postGroupChatSave(');
+    const sendBoundGroupChatSaveCode = extractJsFunction(groupChatsSource, 'async function sendBoundGroupChatSave(');
+    const saveGroupChatCode = extractJsFunction(groupChatsSource, 'async function saveGroupChat(');
+    const saveGroupBookmarkChatCode = extractJsFunction(groupChatsSource, 'export async function saveGroupBookmarkChat(');
+    const captureOriginCode = extractJsFunction(bookmarksSource, 'function captureBookmarkOriginContext(');
+    const getExistingChatNamesCode = extractJsFunction(bookmarksSource, 'async function getExistingChatNames(');
+    const getBranchChatSnapshotCode = extractJsFunction(bookmarksSource, 'function getBranchChatSnapshot(');
+    const createBranchCode = extractJsFunction(bookmarksSource, 'export async function createBranch(');
+    const branchChatCode = extractJsFunction(bookmarksSource, 'export async function branchChat(');
+
+    const aliceOriginalMessage = { mes: 'Alice branch floor 0', extra: {} };
+    const state = {
+        aliceOriginalMessage,
+        chat: [aliceOriginalMessage],
+        selected_group: null,
+        this_chid: 0,
+        characters: [
+            { avatar: 'Alice.png', chat: 'Alice - Main', name: 'Alice' },
+            { avatar: 'Bob.png', chat: 'Bob - Main', name: 'Bob' },
+        ],
+        groups: [
+            { id: 'grp-1', name: 'Party', chat_id: 'group-chat-a', chats: ['group-chat-a'] },
+        ],
+        chat_metadata: { integrity: 'alice-meta', note: 'from-alice' },
+        name2: 'Alice',
+        neutralCharacterName: 'System',
+        isChatSaving: false,
+        is_group_generating: false,
+        is_send_press: false,
+        requests: [],
+        openedCharacterChats: [],
+        openedGroupChats: [],
+        editedGroups: [],
+        itemizedSaved: [],
+        infoToasts: [],
+        lockObservedDuringInitialFetch: false,
+        chidAfterBlockedUiSwitch: null,
+        onInitialConflictSave: null,
+        popupResult: 'OVERWRITE',
+    };
+
+    const vmModule = await import('node:vm');
+    const context = vmModule.createContext({
+        console: { warn: () => {}, error: () => {}, trace: () => {} },
+        Date,
+        Error,
+        Array,
+        Object,
+        Boolean,
+        Number,
+        String,
+        Math,
+        JSON,
+        structuredClone,
+        DEFAULT_SAVE_EDIT_TIMEOUT: 1000,
+        get chat() { return state.chat; },
+        get selected_group() { return state.selected_group; },
+        set selected_group(v) { state.selected_group = v; },
+        get this_chid() { return state.this_chid; },
+        set this_chid(v) { state.this_chid = v; },
+        get characters() { return state.characters; },
+        get groups() { return state.groups; },
+        get chat_metadata() { return state.chat_metadata; },
+        get name2() { return state.name2; },
+        get neutralCharacterName() { return state.neutralCharacterName; },
+        get isChatSaving() { return state.isChatSaving; },
+        set isChatSaving(v) { state.isChatSaving = v; },
+        get is_group_generating() { return state.is_group_generating; },
+        get is_send_press() { return state.is_send_press; },
+        getCurrentChatDetails: () => ({
+            sessionName: state.selected_group
+                ? (state.groups.find(g => g.id === state.selected_group)?.chat_id ?? '')
+                : (state.characters[state.this_chid]?.chat ?? ''),
+        }),
+        getUniqueName: (base, existsFn, { nameBuilder, startIndex = 1 }) => {
+            for (let i = startIndex; i < 100; i++) {
+                const candidate = nameBuilder(base, i);
+                if (!existsFn(candidate)) {
+                    return candidate;
+                }
+            }
+            return null;
+        },
+        uuidv4: () => 'branch-uuid-1',
+        syncSwipeToMes: () => true,
+        getRequestHeaders: () => ({ 'Content-Type': 'application/json' }),
+        compressRequest: async (req) => req,
+        waitUntilCondition: async (cond) => {
+            if (!cond()) {
+                throw new Error('Timed out');
+            }
+        },
+        fetch: async (url, init) => {
+            const body = JSON.parse(init.body);
+            state.requests.push({ url, body, lockHeldDuringFetch: state.isChatSaving });
+            if (url === '/api/characters/chats') {
+                return {
+                    ok: true,
+                    status: 200,
+                    json: async () => ({ 0: { file_name: 'Alice - Main.jsonl' } }),
+                };
+            }
+            if (!body.force) {
+                if (state.onInitialConflictSave) {
+                    await state.onInitialConflictSave(url, body);
+                }
+                return {
+                    ok: false,
+                    status: 400,
+                    statusText: 'Bad Request',
+                    json: async () => ({ error: 'integrity' }),
+                };
+            }
+            return { ok: true, status: 200, json: async () => ({ result: 'ok' }) };
+        },
+        Popup: { show: { input: async () => state.popupResult } },
+        toastr: {
+            error: () => {},
+            warning: () => {},
+            info: (msg) => { state.infoToasts.push(msg); },
+            success: () => {},
+        },
+        t: (strings) => Array.isArray(strings) ? strings.join('') : String(strings),
+        window: { location: { reload: () => {} } },
+        saveItemizedPrompts: async (name) => { state.itemizedSaved.push(name); },
+        openCharacterChat: async (name) => { state.openedCharacterChats.push(name); },
+        openGroupChat: async (gid, cid) => { state.openedGroupChats.push({ gid, cid }); },
+        editGroup: async (gid) => { state.editedGroups.push(gid); },
+        setCharacterId: (id) => { state.this_chid = id; },
+        setCharacterName: (n) => { state.name2 = n; },
+        resetSelectedGroup: () => { state.selected_group = null; },
+        clearChat: async () => { state.chat = []; },
+        cancelTtsPlay: () => {},
+        getChat: async () => {},
+        unshallowCharacter: async () => {},
+        select_selected_character: () => {},
+    });
+
+    vmModule.runInContext(
+        [
+            'let selected_button = ""; let this_edit_mes_id;',
+            saveChatCode,
+            withChatSaveLockCode,
+            selectCharacterByIdCode,
+            postGroupChatSaveCode,
+            sendBoundGroupChatSaveCode,
+            saveGroupChatCode,
+            saveGroupBookmarkChatCode,
+            captureOriginCode,
+            getExistingChatNamesCode,
+            getBranchChatSnapshotCode,
+            createBranchCode,
+            branchChatCode,
+            'globalThis.fns = { branchChat, createBranch, selectCharacterById, saveGroupChat, saveGroupBookmarkChat };',
+        ].join('\n'),
+        context,
+    );
+    return { state, fns: context.fns };
+}
+
 class MockElement {
     constructor(tagName = 'div', classes = [], id = '') {
         this.tagName = tagName.toUpperCase();
@@ -570,105 +870,8 @@ describe('Pending Ownership Core Fixes (WP-2)', () => {
     });
 
     test('saveChatConditional aborts cross-chat drift during lock wait, tolerates same-avatar this_chid reindexing, and propagates boolean save status', async () => {
-        const scriptPath = fileURLToPath(new URL('../public/script.js', import.meta.url));
-        const scriptSource = fs.readFileSync(scriptPath, 'utf8');
-
-        const extractExportedAsyncFn = (src, fnName) => {
-            const marker = `export async function ${fnName}(`;
-            const start = src.indexOf(marker);
-            expect(start).toBeGreaterThanOrEqual(0);
-            const bodyStart = src.indexOf(') {', start);
-            expect(bodyStart).toBeGreaterThan(start);
-            let depth = 0;
-            for (let i = bodyStart + 2; i < src.length; i++) {
-                const ch = src[i];
-                if (ch === '{') {
-                    depth += 1;
-                } else if (ch === '}') {
-                    depth -= 1;
-                    if (depth === 0) {
-                        return src.slice(start + 'export '.length, i + 1);
-                    }
-                }
-            }
-            throw new Error(`Failed to extract ${fnName}`);
-        };
-
-        const saveChatCode = extractExportedAsyncFn(scriptSource, 'saveChat');
-        const saveChatConditionalCode = extractExportedAsyncFn(scriptSource, 'saveChatConditional');
-
-        const state = {
-            chat: [{ mes: 'Alice edited floor' }],
-            selected_group: null,
-            /** @type {number|string|undefined} */
-            this_chid: '1',
-            characters: [
-                { avatar: 'Zoe.png', chat: 'zoe-main', name: 'Zoe' },
-                { avatar: 'Alice.png', chat: 'main', name: 'Alice' },
-                { avatar: 'Bob.png', chat: 'main', name: 'Bob' },
-            ],
-            chat_metadata: { integrity: 'hash-a' },
-            name1: 'User',
-            name2: 'Alice',
-            neutralCharacterName: 'System',
-            isChatSaving: false,
-            fetchRequests: [],
-            nextFetchOk: true,
-            tokenCacheSaved: 0,
-            itemizedSaved: [],
-            waitHook: null,
-        };
-
-        const vmModule = await import('node:vm');
-        const context = vmModule.createContext({
-            console: { warn: () => {}, error: () => {}, trace: () => {} },
-            Date,
-            Error,
-            Array,
-            Object,
-            JSON,
-            DEFAULT_SAVE_EDIT_TIMEOUT: 1000,
-            get chat() { return state.chat; },
-            get selected_group() { return state.selected_group; },
-            get this_chid() { return state.this_chid; },
-            get characters() { return state.characters; },
-            get chat_metadata() { return state.chat_metadata; },
-            get name1() { return state.name1; },
-            get name2() { return state.name2; },
-            get neutralCharacterName() { return state.neutralCharacterName; },
-            get isChatSaving() { return state.isChatSaving; },
-            set isChatSaving(val) { state.isChatSaving = val; },
-            getCurrentChatId: () => state.selected_group ? 'group-chat' : state.characters[state.this_chid]?.chat,
-            getRequestHeaders: () => ({ 'Content-Type': 'application/json' }),
-            compressRequest: async (req) => req,
-            cancelDebouncedChatSave: () => {},
-            Number,
-            waitUntilCondition: async (cond) => {
-                if (state.waitHook) {
-                    await state.waitHook();
-                }
-                if (!cond()) {
-                    throw new Error('Timed out');
-                }
-            },
-            fetch: async (url, init) => {
-                state.fetchRequests.push({ url, body: JSON.parse(init.body) });
-                if (state.nextFetchOk) {
-                    return { ok: true, status: 200, json: async () => ({ result: 'ok' }) };
-                }
-                return { ok: false, status: 500, json: async () => ({ error: 'disk full' }) };
-            },
-            saveGroupChat: async () => true,
-            saveTokenCache: () => { state.tokenCacheSaved += 1; },
-            saveItemizedPrompts: (id) => { state.itemizedSaved.push(id); },
-            toastr: { error: () => {} },
-            t: (strings) => Array.isArray(strings) ? strings.join('') : String(strings),
-            Popup: { show: { input: async () => '' } },
-            window: { location: { reload: () => {} } },
-        });
-
-        vmModule.runInContext(`${saveChatCode}\n${saveChatConditionalCode}\nglobalThis.fns = { saveChat, saveChatConditional };`, context);
-        const { saveChatConditional } = context.fns;
+        const { state, fns } = await createChatSaveVmHarness();
+        const { saveChat, saveChatConditional } = fns;
 
         // 1. Happy path returns true and saves Alice's 'main' chat.
         expect(await saveChatConditional()).toBe(true);
@@ -709,6 +912,144 @@ describe('Pending Ownership Core Fixes (WP-2)', () => {
         expect(await saveChatConditional()).toBe(false);
         // No save request was sent for Bob!
         expect(state.fetchRequests).toHaveLength(3);
+        state.waitHook = null;
+
+        // 5. Force-overwrite (OVERWRITE) after switching active character A -> B (and even into a group!) preserves bound target A & snapshot!
+        state.this_chid = 0; // Alice.png
+        state.selected_group = null;
+        state.name2 = 'Alice';
+        state.chat = [{ mes: 'Alice original floor before conflict' }];
+        state.chat_metadata = { integrity: 'alice-integrity-1' };
+        const overwriteRequests = [];
+        const scriptedResponses = [
+            () => {
+                // While the first request is in flight, active chat switches to Bob (or even a group)!
+                state.this_chid = 1; // Bob.png
+                state.name2 = 'Bob';
+                state.selected_group = 'group-switched-mid-popup';
+                state.chat = [{ mes: 'Bob floor that must never overwrite or receive Alice snapshot' }];
+                state.chat_metadata = { integrity: 'bob-integrity-999' };
+                return {
+                    ok: false,
+                    status: 400,
+                    statusText: 'Bad Request',
+                    json: async () => ({ error: 'integrity' }),
+                };
+            },
+            () => ({ ok: true, status: 200, json: async () => ({ result: 'ok' }) }),
+        ];
+        state.customFetchHandler = async (url, init) => {
+            const parsed = JSON.parse(init.body);
+            overwriteRequests.push({ url, body: parsed });
+            const nextStep = scriptedResponses.shift();
+            return nextStep();
+        };
+        state.popupHandler = async () => 'OVERWRITE';
+
+        expect(await saveChat()).toBe(true);
+        expect(overwriteRequests).toHaveLength(2);
+        expect(overwriteRequests[0].body.force).toBe(false);
+        expect(overwriteRequests[1].body.force).toBe(true);
+        expect(overwriteRequests[1].body.avatar_url).toBe('Alice.png');
+        expect(overwriteRequests[1].body.ch_name).toBe('Alice');
+        expect(overwriteRequests[1].body.file_name).toBe('main');
+        expect(overwriteRequests[1].body.chat).toEqual([
+            {
+                chat_metadata: { integrity: 'alice-integrity-1' },
+                user_name: 'unused',
+                character_name: 'unused',
+            },
+            { mes: 'Alice original floor before conflict' },
+        ]);
+    });
+
+    test('native branchChat / createBranch and group save retries keep original bound target, snapshot, and save lock across mid-flight switches and OVERWRITE', async () => {
+        const { state, fns } = await createBranchAndGroupVmHarness();
+        const { branchChat, selectCharacterById, saveGroupChat, saveGroupBookmarkChat } = fns;
+
+        // A. Exact Reviewer P1 #1 reproduction:
+        // Start Alice's branch save; while save request is in flight:
+        // 1) Native UI selectCharacterById(1) is blocked by isChatSaving lock!
+        // 2) Even if external code force-switches this_chid/chat/metadata to Bob before OVERWRITE confirmation,
+        //    OVERWRITE still writes Alice's snapshot into Alice.png (never Bob.png), and branchChat does NOT hijack Bob's open chat!
+        state.onInitialConflictSave = async () => {
+            state.lockObservedDuringInitialFetch = state.isChatSaving;
+            await selectCharacterById(1);
+            state.chidAfterBlockedUiSwitch = state.this_chid;
+
+            // Force-simulate character switch to Bob while awaiting integrity conflict + OVERWRITE:
+            state.this_chid = 1;
+            state.name2 = 'Bob';
+            state.chat = [{ mes: 'Bob active chat floor' }];
+            state.chat_metadata = { integrity: 'bob-meta', note: 'from-bob' };
+        };
+
+        const createdBranchName = await branchChat(0);
+        expect(createdBranchName).toBe('Alice - Main - Branch #1');
+        expect(state.lockObservedDuringInitialFetch).toBe(true);
+        expect(state.chidAfterBlockedUiSwitch).toBe(0); // Native switch blocked by shared save lock!
+        expect(state.infoToasts.length).toBeGreaterThan(0);
+
+        const chatSaveCalls = state.requests.filter(r => r.url === '/api/chats/save');
+        expect(chatSaveCalls).toHaveLength(2);
+        for (const call of chatSaveCalls) {
+            expect(call.lockHeldDuringFetch).toBe(true);
+            expect(call.body.avatar_url).toBe('Alice.png');
+            expect(call.body.ch_name).toBe('Alice');
+            expect(call.body.file_name).toBe('Alice - Main - Branch #1');
+            expect(call.body.chat[0].chat_metadata).toEqual({
+                integrity: 'branch-uuid-1',
+                note: 'from-alice',
+                main_chat: 'Alice - Main',
+            });
+            expect(call.body.chat.slice(1)).toEqual([{ mes: 'Alice branch floor 0', extra: {} }]);
+        }
+        expect(chatSaveCalls[0].body.force).toBe(false);
+        expect(chatSaveCalls[1].body.force).toBe(true);
+        expect(state.aliceOriginalMessage.extra.branches).toEqual(['Alice - Main - Branch #1']);
+        // Because active chat drifted to Bob, branchChat must NOT overwrite itemizedPrompts or call openCharacterChat on Bob!
+        expect(state.itemizedSaved).toEqual([]);
+        expect(state.openedCharacterChats).toEqual([]);
+        expect(state.isChatSaving).toBe(false);
+
+        // B. Group saveGroupChat & saveGroupBookmarkChat force-overwrite retries keep bound group chat_id & snapshot!
+        state.requests = [];
+        state.selected_group = 'grp-1';
+        state.groups[0].chat_id = 'group-chat-a';
+        state.chat = [{ mes: 'Group A original floor' }];
+        state.chat_metadata = { integrity: 'grp-meta-a' };
+        state.onInitialConflictSave = async () => {
+            // Mutate group chat_id, chat contents, and chat_metadata mid-flight before OVERWRITE!
+            state.groups[0].chat_id = 'group-chat-b';
+            state.chat = [{ mes: 'Group B mutated floor' }];
+            state.chat_metadata = { integrity: 'grp-meta-b' };
+        };
+
+        expect(await saveGroupChat('grp-1', true)).toBe(true);
+        expect(state.requests).toHaveLength(2);
+        expect(state.requests[0].body.force).toBe(false);
+        expect(state.requests[1].body.force).toBe(true);
+        expect(state.requests[1].body.id).toBe('group-chat-a');
+        expect(state.requests[1].body.chat).toEqual([
+            {
+                chat_metadata: { integrity: 'grp-meta-a' },
+                user_name: 'unused',
+                character_name: 'unused',
+            },
+            { mes: 'Group A original floor' },
+        ]);
+
+        // Also verify saveGroupBookmarkChat binds snapshot across OVERWRITE and appends to group.chats once on success!
+        state.requests = [];
+        state.groups[0].chats = ['group-chat-a'];
+        state.chat = [{ mes: 'Group branch floor 0' }];
+        state.chat_metadata = { integrity: 'grp-branch-base' };
+        expect(await saveGroupBookmarkChat('grp-1', 'group-chat-a - Branch #1', { main_chat: 'group-chat-a' }, 0)).toBe(true);
+        expect(state.requests).toHaveLength(2);
+        expect(state.requests[1].body.force).toBe(true);
+        expect(state.requests[1].body.id).toBe('group-chat-a - Branch #1');
+        expect(state.requests[1].body.chat[1]).toEqual({ mes: 'Group branch floor 0' });
+        expect(state.groups[0].chats).toEqual(['group-chat-a', 'group-chat-a - Branch #1']);
     });
 
     test('world-info.js dry-run guards suppress global scan events and preserve externalActivations', () => {

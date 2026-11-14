@@ -614,38 +614,39 @@ function resetSelectedGroup() {
 }
 
 /**
- * Saves a group chat to the server.
- * @param {string} groupId Group ID
- * @param {boolean} shouldSaveGroup Whether to save the group after saving the chat
- * @param {boolean} force Force the saving on integrity error
- * @returns {Promise<boolean>} A promise that resolves to whether the group chat was saved.
+ * Posts a serialized group chat payload to `/api/chats/group/save`.
+ * @param {string} body Serialized JSON request body
+ * @returns {Promise<Response>}
  */
-async function saveGroupChat(groupId, shouldSaveGroup, force = false) {
-    const group = groups.find(x => x.id == groupId);
-    if (!group) {
-        console.warn('Group not found', groupId);
-        return false;
-    }
-    const chatId = group.chat_id;
-    group.date_last_chat = Date.now();
-    /** @type {ChatHeader} */
-    const chatHeader = {
-        chat_metadata: { ...chat_metadata },
-        user_name: 'unused',
-        character_name: 'unused',
-    };
+async function postGroupChatSave(body) {
     const saveGroupChatRequest = await compressRequest({
         method: 'POST',
         headers: getRequestHeaders(),
-        body: JSON.stringify({ id: chatId, chat: [chatHeader, ...chat], force: force }),
+        body,
     });
-    const response = await fetch('/api/chats/group/save', saveGroupChatRequest);
+    return await fetch('/api/chats/group/save', saveGroupChatRequest);
+}
 
-    if (!response.ok) {
-        const errorData = await response.json();
+/**
+ * Sends a pre-bound group chat payload and handles confirmed `OVERWRITE`
+ * integrity retries against that exact bound payload without re-reading globals.
+ * @param {string} initialBody Serialized JSON body captured synchronously at entry
+ * @param {object} [options={}]
+ * @param {boolean} [options.force=false]
+ * @param {string} [options.toastTitle]
+ * @returns {Promise<boolean>}
+ */
+async function sendBoundGroupChatSave(initialBody, { force = false, toastTitle = t`Group Chat could not be saved` } = {}) {
+    try {
+        const response = await postGroupChatSave(initialBody);
+        if (response.ok) {
+            return true;
+        }
+
+        const errorData = await response.json().catch(() => null);
         const isIntegrityError = errorData?.error === 'integrity' && !force;
         if (!isIntegrityError) {
-            toastr.error(t`Check the server connection and reload the page to prevent data loss.`, t`Group Chat could not be saved`);
+            toastr.error(t`Check the server connection and reload the page to prevent data loss.`, toastTitle);
             console.error('Group chat could not be saved', response);
             return false;
         }
@@ -666,7 +667,59 @@ async function saveGroupChat(groupId, shouldSaveGroup, force = false) {
             return false;
         }
 
-        return await saveGroupChat(groupId, shouldSaveGroup, true);
+        const retryBody = JSON.stringify({ ...JSON.parse(initialBody), force: true });
+        const retryResponse = await postGroupChatSave(retryBody);
+        if (!retryResponse.ok) {
+            toastr.error(t`Check the server connection and reload the page to prevent data loss.`, toastTitle);
+            console.error('Group chat could not be saved', retryResponse);
+            return false;
+        }
+
+        return true;
+    } catch (error) {
+        console.error('Group chat could not be saved', error);
+        toastr.error(t`Check the server connection and reload the page to prevent data loss.`, toastTitle);
+        return false;
+    }
+}
+
+/**
+ * Saves a group chat to the server.
+ * @param {string} groupId Group ID
+ * @param {boolean} shouldSaveGroup Whether to save the group after saving the chat
+ * @param {boolean} force Force the saving on integrity error
+ * @returns {Promise<boolean>} A promise that resolves to whether the group chat was saved.
+ */
+async function saveGroupChat(groupId, shouldSaveGroup, force = false) {
+    const group = groups.find(x => x.id == groupId);
+    if (!group) {
+        console.warn('Group not found', groupId);
+        return false;
+    }
+    const chatId = group.chat_id;
+    if (!chatId) {
+        console.warn('Group chat_id not found', groupId);
+        return false;
+    }
+    group.date_last_chat = Date.now();
+    /** @type {ChatHeader} */
+    const chatHeader = {
+        chat_metadata: { ...chat_metadata },
+        user_name: 'unused',
+        character_name: 'unused',
+    };
+    const initialBody = JSON.stringify({
+        id: chatId,
+        chat: [chatHeader, ...chat],
+        force: Boolean(force),
+    });
+
+    const saved = await sendBoundGroupChatSave(initialBody, {
+        force,
+        toastTitle: t`Group Chat could not be saved`,
+    });
+    if (!saved) {
+        return false;
     }
 
     if (shouldSaveGroup) {
@@ -2355,20 +2408,19 @@ export async function importGroupChat(formData, { refresh = true } = {}) {
  * @param {ChatMetadata?} metadata New metadata to save with the chat
  * @param {number|undefined} mesId Optional message ID to trim the chat up to
  * @param {ChatMessage[]|undefined} chatData Optional chat snapshot to save instead of the current in-memory chat
- * @returns {Promise<void>} Promise that resolves when the group chat is saved
+ * @param {ChatMetadata|undefined} baseMetadata Optional bound chat metadata snapshot
+ * @returns {Promise<boolean>} Promise that resolves to whether the group bookmark chat was saved
  */
-export async function saveGroupBookmarkChat(groupId, name, metadata, mesId, chatData = undefined) {
+export async function saveGroupBookmarkChat(groupId, name, metadata, mesId, chatData = undefined, baseMetadata = undefined) {
     const group = groups.find(x => x.id === groupId);
 
-    if (!group) {
-        return;
+    if (!group || !name) {
+        return false;
     }
-
-    group.chats.push(name);
 
     /** @type {ChatHeader} */
     const chatHeader = {
-        chat_metadata: { ...chat_metadata, ...(metadata || {}) },
+        chat_metadata: { ...(baseMetadata ?? chat_metadata), ...(metadata || {}) },
         user_name: 'unused',
         character_name: 'unused',
     };
@@ -2378,21 +2430,27 @@ export async function saveGroupBookmarkChat(groupId, name, metadata, mesId, chat
         ? chatData
         : (mesId !== undefined && mesId >= 0 && mesId < chat.length)
             ? chat.slice(0, Number(mesId) + 1)
-            : chat;
+            : chat.slice();
 
-    await editGroup(groupId, true, false);
-
-    const saveChatRequest = await compressRequest({
-        method: 'POST',
-        headers: getRequestHeaders(),
-        body: JSON.stringify({ id: name, chat: [chatHeader, ...trimmedChat] }),
+    const initialBody = JSON.stringify({
+        id: name,
+        chat: [chatHeader, ...trimmedChat],
+        force: false,
     });
-    const response = await fetch('/api/chats/group/save', saveChatRequest);
 
-    if (!response.ok) {
-        toastr.error(t`Check the server connection and reload the page to prevent data loss.`, t`Group chat could not be saved`);
-        console.error('Group chat could not be saved', response);
+    const saved = await sendBoundGroupChatSave(initialBody, {
+        force: false,
+        toastTitle: t`Group chat could not be saved`,
+    });
+    if (!saved) {
+        return false;
     }
+
+    if (!group.chats.includes(name)) {
+        group.chats.push(name);
+    }
+    await editGroup(groupId, true, false);
+    return true;
 }
 
 function onSendTextareaInput() {

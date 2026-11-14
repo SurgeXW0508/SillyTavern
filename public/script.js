@@ -7451,34 +7451,37 @@ export function saveChatDebounced() {
  * @param {number} [options.mesId] The message ID to save the chat up to
  * @param {boolean} [options.force] Force the saving despite the integrity check result
  * @param {ChatMessage[]} [options.chatData] Chat snapshot to save instead of the current in-memory chat
+ * @param {Character} [options.targetCharacter] Bound character target to save against instead of re-reading this_chid
+ * @param {ChatMetadata} [options.baseMetadata] Bound chat metadata snapshot to merge with withMetadata
  *
  * @returns {Promise<boolean>}
  */
-export async function saveChat({ chatName, withMetadata, mesId, force = false, chatData = undefined } = {}) {
-    if (selected_group) {
-        toastr.error(t`Operation was aborted to prevent data corruption.`, t`saveChat called for a group chat`);
-        throw new Error('saveChat called for a group chat');
-    }
-
+export async function saveChat({ chatName, withMetadata, mesId, force = false, chatData = undefined, targetCharacter = undefined, baseMetadata = undefined } = {}) {
     if (arguments.length > 0 && typeof arguments[0] !== 'object') {
         console.trace('saveChat called with positional arguments. Please use an object instead.');
         [chatName, withMetadata, mesId, force] = arguments;
     }
 
-    const metadata = { ...chat_metadata, ...(withMetadata || {}) };
-    const fileName = chatName ?? characters[this_chid]?.chat;
+    if (!targetCharacter && selected_group) {
+        toastr.error(t`Operation was aborted to prevent data corruption.`, t`saveChat called for a group chat`);
+        throw new Error('saveChat called for a group chat');
+    }
 
-    if (!fileName && name2 === neutralCharacterName) {
+    const resolvedCharacter = targetCharacter ?? characters[this_chid];
+    const metadata = { ...(baseMetadata ?? chat_metadata), ...(withMetadata || {}) };
+    const fileName = chatName ?? resolvedCharacter?.chat;
+
+    if (!fileName && !targetCharacter && name2 === neutralCharacterName) {
         // TODO: Do something for a temporary chat with no character.
         return false;
     }
 
-    if (!fileName) {
+    if (!fileName || !resolvedCharacter) {
         console.warn('saveChat called without chat_name and no chat file found');
         return false;
     }
 
-    characters[this_chid].date_last_chat = Date.now();
+    resolvedCharacter.date_last_chat = Date.now();
 
     const trimmedChat = Array.isArray(chatData)
         ? chatData
@@ -7493,26 +7496,32 @@ export async function saveChat({ chatName, withMetadata, mesId, force = false, c
         character_name: 'unused',
     };
 
-    try {
+    const initialBody = JSON.stringify({
+        ch_name: resolvedCharacter.name,
+        file_name: fileName,
+        chat: [chatHeader, ...trimmedChat],
+        avatar_url: resolvedCharacter.avatar,
+        force: Boolean(force),
+    });
+
+    const postChatSave = async (body) => {
         const saveChatRequest = await compressRequest({
             method: 'POST',
             cache: 'no-cache',
             headers: getRequestHeaders(),
-            body: JSON.stringify({
-                ch_name: characters[this_chid].name,
-                file_name: fileName,
-                chat: [chatHeader, ...trimmedChat],
-                avatar_url: characters[this_chid].avatar,
-                force: force,
-            }),
+            body,
         });
-        const result = await fetch('/api/chats/save', saveChatRequest);
+        return await fetch('/api/chats/save', saveChatRequest);
+    };
+
+    try {
+        const result = await postChatSave(initialBody);
 
         if (result.ok) {
             return true;
         }
 
-        const errorData = await result.json();
+        const errorData = await result.json().catch(() => null);
         const isIntegrityError = errorData?.error === 'integrity' && !force;
         if (!isIntegrityError) {
             throw new Error(result.statusText);
@@ -7534,7 +7543,13 @@ export async function saveChat({ chatName, withMetadata, mesId, force = false, c
             return false;
         }
 
-        return await saveChat({ chatName, withMetadata, mesId, force: true, chatData });
+        const retryBody = JSON.stringify({ ...JSON.parse(initialBody), force: true });
+        const retryResult = await postChatSave(retryBody);
+        if (!retryResult.ok) {
+            throw new Error(retryResult.statusText);
+        }
+
+        return true;
     } catch (error) {
         console.error(error);
         toastr.error(t`Check the server connection and reload the page to prevent data loss.`, t`Chat could not be saved`);
@@ -9472,6 +9487,41 @@ export async function saveMetadata() {
     return await saveChatConditional();
 }
 
+/**
+ * Runs an async chat-persistence callback under the shared `isChatSaving` lock.
+ * A `while (isChatSaving)` loop ensures multiple concurrent waiters serialize
+ * strictly one at a time instead of waking on the same poll tick.
+ *
+ * @template T
+ * @param {() => Promise<T>} callback
+ * @param {number} [timeout=DEFAULT_SAVE_EDIT_TIMEOUT]
+ * @returns {Promise<{ acquired: boolean, value: T | undefined }>}
+ */
+export async function withChatSaveLock(callback, timeout = DEFAULT_SAVE_EDIT_TIMEOUT) {
+    const deadline = Date.now() + timeout;
+    while (isChatSaving) {
+        const remaining = Math.max(1, deadline - Date.now());
+        try {
+            await waitUntilCondition(() => !isChatSaving, remaining, 100);
+        } catch {
+            console.warn('Timeout waiting for chat to save');
+            return { acquired: false, value: undefined };
+        }
+        if (isChatSaving && Date.now() >= deadline) {
+            console.warn('Timeout waiting for chat to save');
+            return { acquired: false, value: undefined };
+        }
+    }
+
+    isChatSaving = true;
+    try {
+        const value = await callback();
+        return { acquired: true, value };
+    } finally {
+        isChatSaving = false;
+    }
+}
+
 export async function saveChatConditional() {
     const targetGroup = selected_group;
     const targetHasCharacter = !selected_group && this_chid !== undefined;
@@ -9487,43 +9537,36 @@ export async function saveChatConditional() {
             && getCurrentChatId() === targetChatId;
     };
 
-    try {
-        await waitUntilCondition(() => !isChatSaving, DEFAULT_SAVE_EDIT_TIMEOUT, 100);
-    } catch {
-        console.warn('Timeout waiting for chat to save');
-        return false;
-    }
-
-    if (!isSameSaveTarget()) {
-        console.warn('Active chat changed while waiting for chat save lock; aborting stale saveChatConditional');
-        return false;
-    }
-
-    try {
-        cancelDebouncedChatSave();
-
-        isChatSaving = true;
-
-        const saved = selected_group
-            ? await saveGroupChat(selected_group, true)
-            : await saveChat();
-
-        if (!saved) {
+    const lockResult = await withChatSaveLock(async () => {
+        if (!isSameSaveTarget()) {
+            console.warn('Active chat changed while waiting for chat save lock; aborting stale saveChatConditional');
             return false;
         }
 
-        // Save token and prompts cache to IndexedDB storage only if the same chat remains active
-        if (isSameSaveTarget()) {
-            saveTokenCache();
-            saveItemizedPrompts(targetChatId);
+        try {
+            cancelDebouncedChatSave();
+
+            const saved = selected_group
+                ? await saveGroupChat(selected_group, true)
+                : await saveChat();
+
+            if (!saved) {
+                return false;
+            }
+
+            // Save token and prompts cache to IndexedDB storage only if the same chat remains active
+            if (isSameSaveTarget()) {
+                saveTokenCache();
+                saveItemizedPrompts(targetChatId);
+            }
+            return true;
+        } catch (error) {
+            console.error('Error saving chat', error);
+            return false;
         }
-        return true;
-    } catch (error) {
-        console.error('Error saving chat', error);
-        return false;
-    } finally {
-        isChatSaving = false;
-    }
+    });
+
+    return lockResult.acquired ? Boolean(lockResult.value) : false;
 }
 
 /**
