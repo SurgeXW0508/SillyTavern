@@ -74,6 +74,7 @@ Decision Log、SH取舍索引及C-E0交接是对应阶段的历史证据。已�
 | 键盘焦点扫描合并与前端 `fetch` 管线 / 设置保存 | ST Core（`keyboard.js` 唯一 Owner）+ 柏宝库 / 柏宝箱 | 关闭对应开关按槽位精确摘除或空槽直通 | ST Core 原生固化选择器索引（覆盖祖先组合类名）、`WeakSet` 去重、后台 512 上限有界队列、先祖先折叠再对风暴取最近公共祖先（LCA）；柏宝库删除全局 `MutationObserver` 劫持与客户端哈希丢写，`handleFastSettingsSave` 以发包前 FIFO 门控队列 `settingsSaveDispatchQueue` + 客户端纪元请求头 `X-Baibaoku-Save-Seq` + 单调 `settingsSaveSeq` 保证异步压缩与多连接下新设置不被旧请求覆盖，禁止发出后回退重发且派发前异常同步失效挂起缓存；柏宝箱收敛单一闭包绑定 `fetchPipeline`（安全兼容未打标外层第三方 `fetch` 包装，关闭主题懒加载时卸载并清空页面缓存） |
 | Token Count失败结算 / Tokenizer资源初始化 | ST | — | Core生命周期single-flight与失败结算由ST独立保证 |
 | Reasoning初始化 / 编辑与基础Chat导入 | ST | — | Handler单次装配；导入只创建新文件 |
+| 流式热路径降耗 / 世界书单轮扫描复用 / 宏纯文本快路径 / 闭合文件夹与楼层标签过滤 | ST Core（唯一 Owner） | Shalistera 仅参考；跨请求 `MarkdownRenderCache` 与 `stream-fadein` 分段 `morphdom` 不引入 | 后缀扫描 `getMessageDepth`、DOM 写成功后再更新 `lastRenderedHtml`（完整保留 `previewFailed` 契约）、单遍 `unhashHTMLSpans`（守卫下标越界与循环上限）、隐藏标签页 `250ms` 预览节流（切回前台立即恢复原 FPS，与柏宝箱 `content-visibility` 正交互补）；`WorldInfoBuffer` 单次扫描内有界切片/小写折叠缓存（随局部实例自动 GC，不跨请求留存）；`evaluateMacros`（前置保留 `chat_id_hash`/`charPrompt`/自定义宏副作用并检查 `<`）与 `MacroEngine.evaluate`（保留前置/后置处理器）无 `{{` 纯文本快路径；`createClosedFolderFilter` 单次 `Set` 预索引与 `applyCharacterTagsToMessageDivs` `#chat > .mes` `Set` 过滤（修复 `mesIds=0` 边界） |
 
 ## Disabled Features
 
@@ -145,39 +146,40 @@ Evidence：详见[Phase C-D closeout](PHASE_CD_CLOSEOUT.md)中的命令、边界
 | Generic streaming pending content | Adopt Now（部分Already Covered） | ST | 原有Vertex partial和正文tool收尾已覆盖；补公共错误、reasoning-only工具、Stop工具保护和终态引用释放 |
 | Chat import collision / CAI histories | Adopt Now（仅导入） | ST | 唯一名与排他创建；不带入summary/search/cache |
 | Custom model IDs | Intentional Omission | ST optional | 当前选择器与请求链已可使用`gemini-4-argon`；仅验证现有代码路径，不断言NAS实际目标/权限 |
-| Indexed span semantics | Already Covered | ST | 官方基线仍按下标访问；未采用引入iterator差异的SH span优化 |
+| Indexed span semantics | Adopted（adapted，单遍还原且保留下标边界） | ST | `addShowdownPatch` 采用单遍 `¨C(\d+)C` 还原并显式校验 `nestedIndex` 整数与数组长度边界，规避 `bebe62bd` 迭代器回归；流式淡入分段 DOM 复用不引入 |
 | Chat search isolation / chat & character caches / long-chat optimizations | Resolved（单Owner分工） | ST Core + 柏宝库 / 柏宝箱 | 2026-11-13完成三链路宏观收口：ST Core收口`DiskCache→memoryCache`回填、`O(M)`增量聊天片段匹配与文件名命中免解析正文、`keyboard.js`原生`rAF`去重合并；空查询快表/浅表角色索引由柏宝库按POSIX目录精确失效与降级预览对齐承担；长聊天离屏渲染由柏宝箱`content-visibility`承担，不引入SH第二套独立缓存层 |
-| 其他render/cache/scan/UI/build性能、诊断和benchmark | Intentional Omission | — | 当前不以性能换长期diff，不把合成benchmark当实机收益 |
+| 用户场景命中的无跨请求缓存 Core 热路径优化（流式后缀深度/DOM 去重/隐藏标签页节流、单轮 WI 切片复用、宏纯文本快路径、闭合文件夹与楼层标签 `Set` 过滤） | Adopted（adapted，2026-11-14 用户授权二次吸收） | ST Core | 针对几千张角色卡（配合酒馆助手角色卡管理脚本）、千层长聊与 Vertex 思维链流式高频热路径，按 ST Core 单一 Owner 最小侵入落地（零修改柏宝箱/柏宝库、零跨请求持久缓存）；详见文末 2026-11-14 专节 |
+| 其余跨请求渲染缓存（`MarkdownRenderCache` / `882b344f`）、`stream-fadein` 分段 `morphdom`、极大数组替换、微秒级 IO/构建/UI 改动、诊断与 benchmark 体系 | Intentional Omission / Reject | — | 流式淡入常态关闭故省略 `A4`；跨请求显示缓存有失效陈旧风险明确 Reject；6.5 万楼参数上限未触及真实场景；几毫秒级细碎 diff 不增加长期维护负担 |
 
 31提交完整索引（短SHA链接到精确来源）：
 
 | SH commit | 主要范围 | Status | 取舍 / Owner |
 | --- | --- | --- | --- |
 | [510fbb54](https://github.com/Shalistera/SillyTavern/commit/510fbb545f3c713c869e86fff106b3d1a830ce63) | Vertex与诊断 | Adopted | Vertex由ST适配保留；诊断不引入 |
-| [01b87c88](https://github.com/Shalistera/SillyTavern/commit/01b87c88d08206ea056e622e955642c159f72f4c) | 消息/Reasoning深度与fade | Intentional Omission | 性能和渲染diff；不采用 |
-| [b34249a6](https://github.com/Shalistera/SillyTavern/commit/b34249a6c81e4cbffbb8cff6f45f32243c2ad2a1) | Markdown / WI / Chat Search | Resolved（Search根因）/ Reject（Markdown缓存） | ST Core收口`createChatFragmentMatcher` `O(M)`搜索与文件名全命中免读正文，空查询快表归柏宝库；Markdown缓存明确Reject |
+| [01b87c88](https://github.com/Shalistera/SillyTavern/commit/01b87c88d08206ea056e622e955642c159f72f4c) | 消息/Reasoning深度与fade | Adopted（adapted，仅后缀深度与DOM去重）/ Omit（fade分段） | ST Core 采用后缀扫描 `getMessageDepth` 与 `createStreamingContentUpdater` 无变更 DOM 写入短路（写成功后再缓存以保持 `previewFailed` 契约）；用户常态关闭流式淡入，分段 `morphdom` 不引入 |
+| [b34249a6](https://github.com/Shalistera/SillyTavern/commit/b34249a6c81e4cbffbb8cff6f45f32243c2ad2a1) | Markdown / WI / Chat Search | Resolved（Search根因）/ Adopted（adapted，单遍Span与单轮WI扫描复用）/ Reject（Markdown缓存） | ST Core 收口 `createChatFragmentMatcher` `O(M)` 搜索、Showdown 单遍 `unhashHTMLSpans` 与 `WorldInfoBuffer` 单次扫描有界切片/小写折叠复用；空查询快表归柏宝库，跨请求 `MarkdownRenderCache` 明确 Reject |
 | [b1ae6199](https://github.com/Shalistera/SillyTavern/commit/b1ae6199d44b9c0626552a7e00ac4d99ef618eea) | Chat summaries与Import | Adopt Now（仅导入）/ Reject（Core二级摘要仓） | 仅采用CAI转换和导入防覆盖；快表摘要由柏宝库单一Owner承担，不在Core叠加第二套缓存 |
 | [6360ee2c](https://github.com/Shalistera/SillyTavern/commit/6360ee2ce883411eb5bbe94a3be3c962ee846329) | stale search / Markdown / template | Resolved（Search分工）/ Reject（Markdown缓存） | 柏宝库补齐已删群聊GC与截断行降级预览对齐，ST Core保持无状态流式搜索；Markdown缓存明确Reject |
 | [097be538](https://github.com/Shalistera/SillyTavern/commit/097be5384c3a947b0d809b9d06845ff10a88578a) | Reasoning编辑/初始化 | Adopt Now | ST；不增加第二套Reasoning状态 |
 | [3ef63e86](https://github.com/Shalistera/SillyTavern/commit/3ef63e86c43a3c2637ec70fb972e09c0d93293c9) | 模型/性能文档与测试 | Intentional Omission | 非运行时依赖；使用个人验证文档 |
-| [78a22e87](https://github.com/Shalistera/SillyTavern/commit/78a22e873a0ebc81db9df68c33855e040f1bb559) | 跨API自定义模型ID | Intentional Omission | 可选功能；当前目标ID链路已有 |
+| [78a22e87](https://github.com/Shalistera/SillyTavern/commit/78a22e873a0ebc81db9df68c33855e040f1bb559) | 跨API自定义模型ID | Intentional Omission | 可选功能；Vertex 已有目标模型链路，OpenAI 兼容副渠道由自定义渠道模型输入与柏系列覆盖，不改十余个后端 |
 | [69c6f626](https://github.com/Shalistera/SillyTavern/commit/69c6f6261b82429411ecfea7550bd5e949f7eb50) | Chat byte scan / Search summaries | Resolved（单Owner分工） | 空查询尾部扫描与SQLite摘要归柏宝库（补齐0字节/截断行语义），Core仅保留最小`O(M)`流式关键词匹配 |
 | [195035e5](https://github.com/Shalistera/SillyTavern/commit/195035e5757f9dc7e7309e2739675ed7bd3bb5b4) | 角色元数据缓存 | Resolved（Core回填 + 柏宝库浅表对齐） | ST Core仅补1行`DiskCache→memoryCache`回填；浅表加速归柏宝库（修复POSIX `chats/<charName>`失效与`toShallow`字段对齐），不引入SH独立角色缓存表 |
-| [f5d33ce1](https://github.com/Shalistera/SillyTavern/commit/f5d33ce1d683c9cce1f4594c35fa45878f98c63b) | Tag / Keyboard初始化性能 | Adopted（仅`keyboard.js`根因）/ Omit（Tag diff） | ST Core `public/scripts/keyboard.js`原生固化合并选择器、`WeakSet`去重、`rAF`按帧合并及`#chat`非焦点类过滤，并删除柏宝库外部`MutationObserver`劫持；Tag列表diff不引入 |
+| [f5d33ce1](https://github.com/Shalistera/SillyTavern/commit/f5d33ce1d683c9cce1f4594c35fa45878f98c63b) | Tag / Keyboard初始化性能 | Adopted（adapted，`keyboard.js`根因 + 楼层标签`Set`过滤）/ Omit（其余Tag列表diff） | ST Core `public/scripts/keyboard.js`原生固化选择器索引、`WeakSet`去重、`rAF`按帧合并及子树LCA折叠（删除柏宝库外部`MutationObserver`劫持），并在`applyCharacterTagsToMessageDivs`用`#chat > .mes`单次`Set`过滤替代千层超长选择器拼接（修复`mesIds=0`边界）；其余Tag初始化diff不引入 |
 | [0ca7ceac](https://github.com/Shalistera/SillyTavern/commit/0ca7ceacdde9629e588c2ce9e062744c10d6ff60) | Avatar fallback listener | Intentional Omission | 局部DOM优化；不扩展本轮事件范围 |
-| [80898271](https://github.com/Shalistera/SillyTavern/commit/80898271ecbd20d1e2e1a2c688933c85009c747f) | Span / Fade性能 | Intentional Omission | 不引入渲染实现与其依赖 |
-| [882b344f](https://github.com/Shalistera/SillyTavern/commit/882b344f4da67ab5f51b625c4021fa1e02e51d1e) | Streaming panel Markdown复用 | Intentional Omission | 显示缓存收益不抵长期diff |
+| [80898271](https://github.com/Shalistera/SillyTavern/commit/80898271ecbd20d1e2e1a2c688933c85009c747f) | Span / Fade性能 | Adopted（adapted，仅单遍`unhashHTMLSpans`）/ Omit（Fade分段与`morphdom`） | 单遍 `¨C(\d+)C` 还原并在同提交内固化下标越界保护；流式淡入常态关闭，不引入 `segmentTemplates` / `morphdom` |
+| [882b344f](https://github.com/Shalistera/SillyTavern/commit/882b344f4da67ab5f51b625c4021fa1e02e51d1e) | Streaming panel Markdown复用 | Intentional Omission | 流式代码块美化面板已由柏宝箱 `streamingRegexDefer` + 柏宝库 `regex-bridge` 推迟至终态单次渲染；不叠加第二套前缀 Markdown 缓存 |
 | [f9404623](https://github.com/Shalistera/SillyTavern/commit/f940462387b9aafeb95d16ac2f1c3a3751f995de) | Media load listener清理 | Intentional Omission | 未发现当前数据损坏；媒体滚动生命周期优化暂不引入 |
 | [93eb4a29](https://github.com/Shalistera/SillyTavern/commit/93eb4a29889bec8bcf6823654bf01833c3ac98b8) | 性能与cache-miss基准 | Intentional Omission | 文档/benchmark，不是Core运行依赖 |
-| [bebe62bd](https://github.com/Shalistera/SillyTavern/commit/bebe62bdad8362f4b1c85e7c065ba48b58b3d2cc) | Span indexed语义 | Already Covered | 官方下标语义仍在；无需带入优化后修复 |
+| [bebe62bd](https://github.com/Shalistera/SillyTavern/commit/bebe62bdad8362f4b1c85e7c065ba48b58b3d2cc) | Span indexed语义 | Already Covered（下标边界已内置守卫） | `addShowdownPatch` 直接校验 `nestedIndex >= 0 && nestedIndex < spans.length`，未引入破坏稀疏/越界下标的迭代器实现 |
 | [234cb02d](https://github.com/Shalistera/SillyTavern/commit/234cb02d2538728fc96c0d64bbbfed2c50619c64) | WI / Persona search | Adopt | ST；2026-11-13性能阶段采用`Set`查找（4行），与柏宝箱搜索替换独立不冲突 |
-| [cfc09c41](https://github.com/Shalistera/SillyTavern/commit/cfc09c41ba55a56e54e0888506313c715b848afc) | Folder索引 | Intentional Omission | 列表性能，无当前必要性 |
+| [cfc09c41](https://github.com/Shalistera/SillyTavern/commit/cfc09c41ba55a56e54e0888506313c715b848afc) | Folder索引 | Adopted（adapted，闭合文件夹`Set`预索引） | ST Core `createClosedFolderFilter` 在单次 `filterByTagState` 调用内预建未选中闭合文件夹 `Set` 与空集短路，消除几千张卡 × 闭合文件夹重复扫描 |
 | [a659d219](https://github.com/Shalistera/SillyTavern/commit/a659d219d81cc5084aa0d6d8c1e8d37c1b76cb49) | Group引用索引 / stat复用 | Intentional Omission | 列表性能，不引入索引状态 |
 | [c8147274](https://github.com/Shalistera/SillyTavern/commit/c8147274b34b281d204fa9887d9048b0431abfa6) | Webpack build cache | Intentional Omission | 构建优化非运行必要依赖 |
-| [a3bb450d](https://github.com/Shalistera/SillyTavern/commit/a3bb450d400b20280566de938ba0f451cabb7dc1) | Macro fast path | Intentional Omission | Prompt宏语义保持上游实现 |
+| [a3bb450d](https://github.com/Shalistera/SillyTavern/commit/a3bb450d400b20280566de938ba0f451cabb7dc1) | Macro fast path | Adopted（adapted，宏纯文本快路径） | ST Core 在 `evaluateMacros`（前置保留 `chat_id_hash`/`charPrompt`/自定义宏副作用并检查 `<`）与 `MacroEngine.evaluate`（保留前置/后置处理器）跳过无 `{{` 纯文本词法/语法树构建 |
 | [46c47c5b](https://github.com/Shalistera/SillyTavern/commit/46c47c5b015bfe90ec582d2a2597b97257ff979b) | Token Count failure | Adopt Now | ST；已有fallback必须结算 |
 | [f84b0a1f](https://github.com/Shalistera/SillyTavern/commit/f84b0a1ffbc986b8e04f71d813a6c6fa835a1a0e) | Thumbnail header读取 | Intentional Omission | IO优化，不改图片路径 |
-| [b35c996c](https://github.com/Shalistera/SillyTavern/commit/b35c996c81cd878e277944bc10f1c367ee129083) | Hidden preview / 大数组替换 | Intentional Omission | 长聊天离屏渲染由柏宝箱`content-visibility`承担，不引入Core侧throttle；极大历史参数上限未在当前环境复现 |
+| [b35c996c](https://github.com/Shalistera/SillyTavern/commit/b35c996c81cd878e277944bc10f1c367ee129083) | Hidden preview / 大数组替换 | Adopted（adapted，仅后台流式预览节流）/ Omit（大数组替换） | ST Core 在 `document.hidden` 时将流式中间预览降频至 `>= 250ms`（切回前台立即恢复原 FPS），与柏宝箱负责历史楼层离屏布局跳过的 `content-visibility` 正交互补；6.5 万楼极大数组替换未触及真实场景，不引入 |
 | [b0f25818](https://github.com/Shalistera/SillyTavern/commit/b0f25818429becd3518b943fd7d5399d3d452f63) | 并行Template初始化 | Intentional Omission | 启动性能，不改顺序 |
 | [fa16e070](https://github.com/Shalistera/SillyTavern/commit/fa16e070a67a57fc4e5be1cc8c5c0f374f3cedfa) | 持久化Chat token cache | Reject | 明确拒绝持久化Chat token缓存；OpenAI兼容批量计数由柏宝箱+柏宝库桥接承担 |
 | [b82c3547](https://github.com/Shalistera/SillyTavern/commit/b82c35477a9f2dbf9dcf07e46f88efae4accf045) | Tokenizer init生命周期 | Adopt Now | ST；single-flight、ready发布、失败可重试 |
@@ -185,7 +187,7 @@ Evidence：详见[Phase C-D closeout](PHASE_CD_CLOSEOUT.md)中的命令、边界
 | [63822f73](https://github.com/Shalistera/SillyTavern/commit/63822f73639d2945b0d1720df66effefb25282b0) | Streaming工具/失败/停止 | Adopt Now | 公共生命周期适配；已有Vertex收尾不再建立副本 |
 | [f67e0000](https://github.com/Shalistera/SillyTavern/commit/f67e000034a130dc25c7fb7571b5731f4c219f89) | CPU与调度争用测量 | Intentional Omission | benchmark准确性改进，无运行依赖 |
 
-本轮五项修复的实现/测试可以独立于未采用的性能提交存在。`bebe62bd`仅是未采用span优化后的修正，不构成必须追加前序优化的理由。`b35c996c`的大数组替换另有极大历史输入的可用性价值，但本轮未确认当前真实数据触及参数数量上限；不把它与pending-content修复捆绑。出现实机数据正确性问题时按下述重新开发门槛处理。
+Phase C-D 当时五项可靠性修复与性能优化解耦落地；随后于 2026-11-14 经用户结合真实使用场景（几千张囤卡 + 酒馆助手角色卡管理面板、千层长聊、Vertex 思维链流式、流式淡入常态关闭）明确授权，对上述无跨请求持久缓存、零柏系列重叠的 8 个 Core 热路径子项完成最小侵入二次吸收（见文末专节）。`bebe62bd` 对应的下标越界隐患已在 `addShowdownPatch` 同提交内直接守卫；`b35c996c` 的 6.5 万楼大数组替换仍因未触及真实场景保持不引入。
 
 ## Phase C Code Freeze
 
@@ -418,3 +420,47 @@ Verification & Measured Gate Evidence（合入稳定主路基线）：
   - `ST-BaiBai-Tools`（`personal/stable@595854ee` / Runtime `1e8d5a81`）：`typecheck:pen` 零错误、`test:pen` 139/139（16 个测试文件，含跨角色同名 `main` 防串认、`expectsHttpChatPersistence` fail-closed、`/del` 命令错误不被锁超时遮蔽、空闲/停用槽位摘除、`storyContext` 流式跳过与并发保护单测）、`test:personal-stable` 17/17（含未打标外层第三方 `window.fetch` 包装下 `1 -> 0 -> 1` 零递归共存、同步异常转 rejected `Promise`、`themeCacheSync` 卸载清缓存、抗压缩混淆字符串字面量死代码剥离校验与异构目录构建一致性）、`test:generate-retry` 162/162、`test:preset-backup-retention` 22/22、`test:preset-search` 15/15；连续两次生产构建产物 SHA256 完全一致（`dist/index.js` = `6baecc06b1e9dbf2dcbb1593e991d684533f6600f4c056f04bda6d55c3aa779d`，`dist/index.css` = `91145ed0b143775ef0e352408afd372370cfa92a388397bb8607dc16a23eeef6`）。
 - 三库隔离 Chromium 真实浏览器全链路 E2E（二轮外审 5 项专项复现 + 未打标外层 `window.fetch` 包装共存验证）全部零 `pageerror` 100% 通过：跨角色同名 `main` 锁释放窗口切会话不串认且不误写新角色聊天、`MESSAGE_EDITED` 异步窗口切会话不污染新聊天 DOM、`fast-save` 写盘后连接重置 `0` 次回退 `/api/settings/save` 且最新设置 `Save B` 完整保留、`#chat` 父容器动态获得 `.mes_buttons` 后子 `.mes_button` 按帧补齐 `tabindex="0"`、根层 `name` 旧 V2 角色卡在 `/v1/characters/fast-all` 与原生一致保留、外层未打标 `window.fetch` 包装存在时 `gzipHook` 开关切换与主题保存正常直通零递归、`WORLDINFO_FORCE_ACTIVATE` 在柏宝砚干跑期间完整保留（干跑期间 `WORLDINFO_ENTRIES_LOADED` / `WORLDINFO_SCAN_DONE` 触发数为 0），Save Generate 请求数为 0。
 - Merged Milestone Status：三库候选分支均已按用户授权快进合入稳定主路（`SillyTavern:release` 阶段 Runtime `5c02da4f1bf865dce85558f14bcbd91f949f823a`、`ST-BaiBai-Tools:personal/stable@595854eeaf36fc05ecd380639d3013048693c768` / Runtime `1e8d5a818e19c7deafee42808aa39033c25170a1`、`baibaoku:personal/stable@2ba8864fa6b16cb425c05b6c66b4fefbfb5fd64c` / Runtime `e9d95265c77187446177e839a2b97975ebb2aa0d`）并在核验 `0 ahead` 后清理全部已合入临时分支；`personal-release.json`、`PRODUCTION_BASELINE.json` 的 `current_production`、GHCR 镜像与 NAS 保持未动，待用户明确授权后统一发布正式 GHCR 镜像并切换 NAS。
+
+## 2026-11-14 — 用户授权的 Shalistera Core 性能二次吸收（Stage Candidate: `stage/core-perf-intake`）
+
+Trigger & User-Confirmed Boundaries：
+
+- 在统一更新正式镜像前，对照 `Shalistera/SillyTavern:release@f67e000034a130dc25c7fb7571b5731f4c219f89`（共同基线 `06bde939`，31 个提交）逐项复盘尚未覆盖的性能点，并结合用户真实常态负载划定边界：
+  1. **几千张角色卡囤卡 + 酒馆助手 `角色卡管理（路西法酱改版1002）` 脚本**：核实该脚本通过监听 `APP_READY`/`CHARACTER_EDITED`/`CHARACTER_DELETED`/`CHARACTER_PAGE_LOADED` 读取内存 `SillyTavern.getContext().characters` 与 `tags`/`tag_map`，将自定义管理页挂入独立 Vue + IndexedDB 虚拟分页网格，本身不替原生 `getCharacters()` 加速，但每次启动、导卡、改卡、切卡仍先触发 ST 原生 `getCharacters() -> printCharacters() -> filterByTagState()`（一次 `getCharacters()` 内连跑 20+ 次 `filterByTagState`），故闭合文件夹 `Set` 预索引直接命中几千张卡主路径。
+  2. **千层长聊（~1,000 层）+ Vertex 思维链流式**：每个流式预览 tick 同时触发正文与思维链深度计算、Showdown HTML span 占位符还原及 DOM 写入，且每次发送触发世界书扫描与数百段纯文本宏求值、加载/追加消息触发 `applyCharacterTagsToMessageDivs`；用户明确确认**常态未开启流式淡入（`stream_fade_in: false`）**，且几乎不会触及 6.5 万楼极端历史。
+  3. **显式排除边界（Non-Goals）**：省略 `stream-fadein.js` 的 `segmentTemplates` / `morphdom` 分段复用（`A4`）；明确拒绝跨请求 `MarkdownRenderCache` 与 `882b344f` 流式面板前缀缓存（代码块面板已由柏宝箱 `streamingRegexDefer` + 柏宝库 `regex-bridge` 推迟至终态单次渲染）；省略 `78a22e87` 跨十余后端自定义模型输入 UI（主用 Vertex + OpenAI 兼容副渠道已有原生自定义输入与柏系列共享渠道）；省略 `b35c996c` 的 `replaceArrayContents` 大数组分块插入及 `a659d219`/`f84b0a1f`/`c8147274`/`b0f25818`/`0ca7ceac`/`f9404623` 等微秒级细碎改动。
+
+Capability Ownership Review & Triad Non-Overlap：
+
+- **单一 Owner 与零跨库改动**：全部 8 个采用子项（`A1`–`A3`、`A5`、`B1`–`B3`、`C1`–`C2`）均属 ST Core 内部算法与局部生命周期优化，不新增任何跨请求持久化缓存、不改动请求协议或存储格式；`ST-BaiBai-Tools`（`personal/stable@595854ee`）与 `baibaoku`（`personal/stable@2ba8864f`）保持 **0 行改动**。
+- **三库协同契约核验**：
+  - 柏宝库全部 5 个宿主文件补丁锚点（`public/index.html`、`public/scripts/world-info.js`、`public/scripts/openai.js`、`public/scripts/extensions/regex/engine.js`、`public/scripts/power-user.js`）仅 `world-info.js` 涉及局部编辑且避开顶部 `getTokenCountAsync` 锚点，实测 5/5 补丁二次执行幂等、`unpatchWorldInfoJs`/`unpatchOpenAIJs` 还原后字节级 100% 一致。
+  - `getMessageDepth(chat, messageId)` 与柏宝砚 `floorShot` 的 `depthZeroProxyId`（从聊天末尾倒找首个 `!is_system` 楼层传入 `messageFormatting`）语义严格等价。
+  - `createStreamingContentUpdater` 仅在真实 DOM 写入（`innerHTML` 或 `applyStreamFadeIn`）成功返回后才更新 `WeakMap` 中的 `lastRenderedHtml`，写入抛错原样上抛、不吞异常、不污染缓存，完整保留 `StreamingProcessor.previewFailed` 与柏宝箱 `streamingRegexDefer` 的终态保护边界。
+  - `getStreamingRenderInterval` 仅在 `document.hidden === true` 时将中间流式预览 `Stopwatch` 间隔提升至 `max(baseInterval, 250ms)`（切回前台立即按 `baseInterval` 恢复，不节流 `STREAM_TOKEN_RECEIVED` 或错误/终态冲刷），负责「时间维度的当前生成楼层重排节流」，与柏宝箱 `longChatRender` 负责「空间维度的历史楼层 `content-visibility` 离屏跳过」正交互补。
+
+Candidate Implementation（`stage/core-perf-intake`，基于 `release@31879033f5fd3afce5157f3e5ae9bae08f9c7880`）：
+
+1. `b1889cd09ea5198e0b7e118d4a588d62367114df` — `perf(streaming): compute message depth from suffix and skip unchanged DOM writes`（`A1 + A2`）：新增无状态后缀扫描 [`public/scripts/util/message-depth.js`](../../public/scripts/util/message-depth.js) 替代 `messageFormatting` 每帧整段 `chat.map().filter().findIndex()`；在 [`public/scripts/util/stream-fadein.js`](../../public/scripts/util/stream-fadein.js) 新增基于 `WeakMap<Element, string>` 的 `createStreamingContentUpdater()` 接入 `StreamingProcessor` 正文与 `ReasoningHandler` 思维链 DOM 更新（正文流式阶段跳过未变思维链重复 `innerHTML` 重写，`force=true` 校验真实 DOM 一致性）。
+2. `48f8337cc597d4d28e13a815245e92c65c6fdaba` — `perf(markdown): restore showdown hashed HTML spans in a single pass`（`A3`）：在 [`public/scripts/util/showdown-patch.js`](../../public/scripts/util/showdown-patch.js) 将 `unhashHTMLSpans` 改为单遍 `/¨C(\d+)C/g` 扫描，嵌套占位符按 `NESTED_SPAN_REPLACE_LIMIT = 10000` 与 `nestedIndex >= 0 && nestedIndex < spans.length` 显式守卫，消除多 HTML 标签流式消息的 $O(S \times L)$ 重复全串扫描并规避 `bebe62bd` 稀疏下标隐患。
+3. `76e0358b835151a4a27c124683a78eb5075cd15c` — `perf(streaming): throttle intermediate preview renders while tab is hidden`（`A5`）：新增纯策略模块 [`public/scripts/util/streaming-render-policy.js`](../../public/scripts/util/streaming-render-policy.js)（`HIDDEN_STREAM_RENDER_INTERVAL_MS = 250`）并在 `StreamingProcessor.generate()` 每 tick 更新 `sw.interval`。
+4. `dde58b7707deebb14bc28bf258b6c56d987bd6b4` — `perf(worldinfo): reuse per-scan buffer slices and case-folded haystacks`（`B1`）：新增 [`public/scripts/util/bounded-text-cache.js`](../../public/scripts/util/bounded-text-cache.js)（`BoundedTextCache`，按字符总长上限 FIFO/LRU 淘汰），作为 `WorldInfoBuffer` 实例私有字段（切片缓存上限 `524,288` 字符、小写折叠缓存上限 `262,144` 字符）：`get` 按 `depth:skew` + 7 个上下文字段掩码复用组装文本并在 `recurseBuffer`/`injectBuffer` 推入时精确失效含对应掩码的缓存项，`matchKeys` 复用同一 haystack 的 `toLowerCase()` 结果，随单次 `checkWorldInfo()` 结束自动 GC。
+5. `fd77e6e6d28c59fb29d065db7d967fc64d43e76f` — `perf(macros): skip unused macro parsing on plain-text inputs`（`B2 + B3`）：在 [`public/scripts/macros.js`](../../public/scripts/macros.js) 的旧版 `evaluateMacros` 中前置保留 `chat_metadata.chat_id_hash` 初始化、`charPrompt` 读取与 `MacrosParser` 自定义环境函数填充副作用，随后对既不含 `{{` 也不含 `<` 的非空字符串直接返回；在 [`public/scripts/macros/engine/MacroEngine.js`](../../public/scripts/macros/engine/MacroEngine.js) 的新版 `MacroEngine.evaluate` 中于 `#runPreProcessors` 之后检查 `!preProcessed.includes('{{')`，跳过 `MacroParser.parseDocument` 与 `MacroCstWalker.evaluateDocument` 并照常执行 `#runPostProcessors`（完整保留 `\{\{` 转义还原与后置钩子）。
+6. `28797486d97375ddefa49f978390c88f1eb083fd` — `perf(tags): pre-index closed folders and filter message divs by Set`（`C1 + C2`）：在 [`public/scripts/filters.js`](../../public/scripts/filters.js) 为 `FilterHelper` 新增只读 `getTagKey(entity)` 访问器；在 [`public/scripts/tags.js`](../../public/scripts/tags.js) 新增 `createClosedFolderFilter(entities, selectedTagIds)` 预建未选中闭合文件夹 `Set` 与空集短路，并将 `applyCharacterTagsToMessageDivs` 改为 `Set<string>` + `$('#chat').children('.mes').filter(...)` 单次子元素过滤（同时修复上游 `mesIds: 0` 被 `!mesIds` 误判全量刷新的边界）。
+
+Verification & Measured Timing Evidence：
+
+- **Lint、单测、三库契约与全量受影响 Playwright E2E**：
+  - `SillyTavern`：根目录 `npm run lint` 0 错误 / 0 警告，`tests` `npm run lint` 0 错误；`tests` `npm run test:unit` **24/24 套件（437 项）**全绿（新增 `core-perf-streaming.test.js`、`showdown-patch.test.js`、`bounded-text-cache.test.js`）；`npm run test:vertex` **40/40**、`npm run test:reliability` **17/17**、`release.node.mjs` **13/13**、Python 治理单测 **4/4** 全绿。
+  - 受影响 Playwright 浏览器 E2E **19 个套件（577 passed, 13 skipped, 0 failed）**全绿：新增 `CorePerfStreaming.e2e.js`（2/2）、`CorePerfScanMacros.e2e.js`（2/2）、`CorePerfTags.e2e.js`（2/2），以及既有 `CoreStreaming.e2e.js`（12/12）、`MessageFormatter.e2e.js`（15/15）、`MacrosParser.e2e.js`（2/2）、`ReasoningLifecycle.e2e.js`（1/1）、`ReasoningHiddenBlocks.e2e.js`（14/14）、`MacroEnvBuilder.e2e.js`（19/19）、`MacroRegistry.e2e.js`（32/32）、`MacroSlashCommands.e2e.js`（12/12）、`MacroStoryString.e2e.js`（1/1）、`MacroLexer.e2e.js` + `MacroParser.e2e.js`（112 passed, 13 skipped）、`MacroEngine.e2e.js`（328/328）、`WorldInfoEditorSwitch.e2e.js`（1/1）、`WorldInfoRenameChatLore.e2e.js`（1/1）、`WorldInfoRenamePersonaLore.e2e.js`（1/1）、`VertexNative.e2e.js`（21/21）。
+  - 伴随仓库回归与三库隔离 Chromium 联跑：`baibaoku` 5 套单测 **66/66** 全绿 + 5/5 宿主桥接幂等与字节级还原通过；`ST-BaiBai-Tools` `typecheck:pen` 0 错误 + 全部 5 套单测 **355/355** 全绿；隔离三库联跑（ST 候选 + 柏宝箱 `personal/stable@595854ee` + 柏宝库 `personal/stable@2ba8864f`）实测 `pageerror = 0`、`http500s = 0`、Save Generate 请求数 `= 0`，柏宝砚 `floorShot` `depthZeroProxyId` 深度 0 渲染对齐、`streamingRegexDefer` 流式跳过 + 正常/错误中断补渲 + `previewFailed=true` 终态保护、Vertex 思维链转正文阶段 `.mes_reasoning` **0 次冗余 DOM 重写**、后台隐藏标签页 `< 250ms` 节流与切回前台立即恢复、Stop 取消终态、千层 `longChatRender`（996 层 `content-visibility` 隔离 + 末尾楼层不隔离）与 `C2` 楼层角色标签写入全部通过。
+- **隔离环境修改前后实测耗时对比（预热后 15 轮中位数，仅作同机算法对照证据，不冒充 NAS 实机验收）**：
+  - **A1 流式楼层深度计算**（1,000 层聊天 × 400 次流式调用，Node 基准）：`11.624ms → 0.015ms`（**-99.9%**，约 775×）。
+  - **A2 流式无变更 DOM 短路**（Vertex 思维链完成后正文流式阶段，Chromium 实测）：`.mes_reasoning` 冗余 DOM 重写次数由每帧重写降至 **`0` 次**。
+  - **A3 Showdown HTML Span 还原**（350 个行内 HTML 标签消息 × 20 次流式 `makeHtml` 完整渲染，Node 基准）：`276.703ms → 163.345ms`（**-41.0%**）。
+  - **B1 世界书单轮扫描缓冲复用**（50 层历史 + 300 条大小写不敏感条目 × 3 关键词，Node 基准）：`11.785ms → 7.496ms`（**-36.4%**）。
+  - **B2 旧版 `evaluateMacros` 纯文本快路径**（300 段纯文本设定/历史块，Chromium 实测）：`6.3ms → 0.1ms`（**-98.4%**，63×）。
+  - **B3 新版 `MacroEngine.evaluate` 纯文本快路径**（300 段纯文本设定/历史块，Chromium 实测）：`41.6ms → 0.7ms`（**-98.3%**，59.4×）。
+  - **C1 闭合文件夹 `Set` 预索引**（3,000 张角色卡 × 20 个闭合文件夹，Node 基准）：单次 `0.926ms → 0.176ms`（**-81.0%**，5.3×；按单次 `getCharacters()` 触发 ~25 次过滤折算约 `23.2ms → 4.4ms`）。
+  - **C2 千层聊天角色标签 DOM 查询**（1,000 层 `#chat > .mes` 目标过滤，Chromium 实测）：`47.7ms → 0.3ms`（**-99.4%**，159×）。
+- **Candidate Status**：上述改动与文档已完整提交于独立候选分支 `stage/core-perf-intake`；`release` 分支、`personal-release.json`、`PRODUCTION_BASELINE.json`、GHCR 镜像与 NAS 生产环境均保持未动，待用户审阅确认后再决定是否快进合入 `release`。
