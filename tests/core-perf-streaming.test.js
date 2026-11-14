@@ -1,5 +1,6 @@
 import { describe, test, expect } from '@jest/globals';
 import { getMessageDepth } from '../public/scripts/util/message-depth.js';
+import { getStreamingRenderInterval, HIDDEN_STREAMING_MIN_INTERVAL_MS } from '../public/scripts/util/streaming-render-policy.js';
 
 /**
  * Reference implementation matching upstream SillyTavern's full-array scan.
@@ -73,5 +74,25 @@ describe('getMessageDepth', () => {
                 expect(getMessageDepth(chat, candidate)).toBe(legacyGetMessageDepth(chat, candidate));
             }
         }
+    });
+});
+
+describe('getStreamingRenderInterval', () => {
+    test('preserves exact foreground interval and clamps hidden interval to at least 250ms', () => {
+        const base30Fps = 1000 / 30;
+        expect(getStreamingRenderInterval({ baseInterval: base30Fps, hidden: false })).toBe(base30Fps);
+        expect(getStreamingRenderInterval({ baseInterval: base30Fps, hidden: true })).toBe(HIDDEN_STREAMING_MIN_INTERVAL_MS);
+    });
+
+    test('never accelerates slower user-configured FPS when hidden', () => {
+        expect(getStreamingRenderInterval({ baseInterval: 500, hidden: false })).toBe(500);
+        expect(getStreamingRenderInterval({ baseInterval: 500, hidden: true })).toBe(500);
+    });
+
+    test('retains Stopwatch fallback semantics for invalid or non-finite intervals', () => {
+        expect(getStreamingRenderInterval({ baseInterval: 1, hidden: false })).toBe(1);
+        expect(getStreamingRenderInterval({ baseInterval: 1, hidden: true })).toBe(HIDDEN_STREAMING_MIN_INTERVAL_MS);
+        expect(getStreamingRenderInterval({ baseInterval: NaN, hidden: false, currentInterval: 20 })).toBe(20);
+        expect(getStreamingRenderInterval({ baseInterval: -5, hidden: false, currentInterval: 0 })).toBe(1);
     });
 });

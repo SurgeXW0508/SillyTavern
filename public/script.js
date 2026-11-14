@@ -280,6 +280,7 @@ import { event_types, eventSource } from './scripts/events.js';
 import { initAccessibility } from './scripts/a11y.js';
 import { createStreamingContentUpdater } from './scripts/util/stream-fadein.js';
 import { getMessageDepth } from './scripts/util/message-depth.js';
+import { getStreamingRenderInterval } from './scripts/util/streaming-render-policy.js';
 import { initDomHandlers } from './scripts/dom-handlers.js';
 import { SimpleMutex } from './scripts/util/SimpleMutex.js';
 import { AudioPlayer } from './scripts/audio-player.js';
@@ -3876,6 +3877,8 @@ class StreamingProcessor {
         this.previewFailed = false;
         try {
             const sw = new Stopwatch(1000 / power_user.streaming_fps);
+            const baseInterval = sw.interval;
+            sw.interval = getStreamingRenderInterval({ baseInterval, hidden: document.hidden, currentInterval: sw.interval });
             const timestamps = [];
             for await (const { text, swipes, logprobs, toolCalls, state } of this.generator()) {
                 const now = Date.now();
@@ -3901,6 +3904,7 @@ class StreamingProcessor {
                 this.vertexMeta = state?.vertexMeta ?? null;
                 pendingPreview = true;
                 await eventSource.emit(event_types.STREAM_TOKEN_RECEIVED, text);
+                sw.interval = getStreamingRenderInterval({ baseInterval, hidden: document.hidden, currentInterval: sw.interval });
                 await sw.tick(async () => {
                     pendingPreview = false;
                     try {
