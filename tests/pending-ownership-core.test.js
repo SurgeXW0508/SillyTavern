@@ -137,11 +137,18 @@ class MockElement {
         if (selector === '.scroll-reset-container') {
             return this.classList.contains('scroll-reset-container');
         }
-        if (selector === '.mes_buttons .mes_button') {
-            if (!this.classList.contains('mes_button')) return false;
+        if (selector === '.extraMesButtons>div:not(.mes_button)') {
+            return this.tagName === 'DIV'
+                && !this.classList.contains('mes_button')
+                && Boolean(this.parentElement?.classList.contains('extraMesButtons'));
+        }
+        const ancestorPairMatch = /^\.([A-Za-z0-9_-]+)\s+\.([A-Za-z0-9_-]+)$/.exec(selector);
+        if (ancestorPairMatch) {
+            const [, ancestorClass, descendantClass] = ancestorPairMatch;
+            if (!this.classList.contains(descendantClass)) return false;
             let ancestor = this.parentElement;
             while (ancestor) {
-                if (ancestor.classList.contains('mes_buttons')) return true;
+                if (ancestor.classList.contains(ancestorClass)) return true;
                 ancestor = ancestor.parentElement;
             }
             return false;
@@ -385,12 +392,74 @@ describe('Pending Ownership Core Fixes (WP-2)', () => {
             // menuBtn is a descendant of scrollContainer, so ancestor collapsing skips scanning menuBtn directly.
             expect(menuBtn.querySelectorAllCalls).toBe(0);
 
-            // Non-interactable #chat container class churn (e.g. last_mes / lastInContext) must skip scheduling.
-            mesRow.classList.add('last_mes');
+            // Irrelevant #chat container class churn (e.g. last_mes / streaming) must skip scheduling.
+            mesRow.classList.add('last_mes', 'streaming');
             observerCallback([
                 { type: 'attributes', attributeName: 'class', target: mesRow, oldValue: 'mes' },
             ]);
             expect(rafQueue.length).toBe(0);
+
+            // Ancestor-dependent selector (.mes_buttons .mes_button): child inserted before parent gains .mes_buttons.
+            const lateMesButtons = mesRow.appendChild(new MockElement('div', []));
+            const lateMesBtn = lateMesButtons.appendChild(new MockElement('div', ['mes_button']));
+            observerCallback([
+                { type: 'childList', addedNodes: [lateMesButtons] },
+            ]);
+            expect(rafQueue.length).toBe(1);
+            rafQueue.shift()();
+            expect(lateMesBtn.hasAttribute('tabindex')).toBe(false);
+
+            lateMesButtons.classList.add('mes_buttons');
+            observerCallback([
+                { type: 'attributes', attributeName: 'class', target: lateMesButtons, oldValue: '' },
+            ]);
+            expect(rafQueue.length).toBe(1);
+            rafQueue.shift()();
+            expect(lateMesBtn.attributes.get('tabindex')).toBe('0');
+            expect(lateMesBtn.classList.contains('interactable')).toBe(true);
+
+            // .extraMesButtons>div:not(.mes_button) ancestor class addition and child .mes_button removal.
+            const extraWrap = mesRow.appendChild(new MockElement('div', []));
+            const extraAction = extraWrap.appendChild(new MockElement('div', ['mes_button']));
+            observerCallback([
+                { type: 'childList', addedNodes: [extraWrap] },
+            ]);
+            rafQueue.shift()();
+            expect(extraAction.hasAttribute('tabindex')).toBe(false);
+
+            extraWrap.classList.add('extraMesButtons');
+            observerCallback([
+                { type: 'attributes', attributeName: 'class', target: extraWrap, oldValue: '' },
+            ]);
+            expect(rafQueue.length).toBe(1);
+            rafQueue.shift()();
+            expect(extraAction.hasAttribute('tabindex')).toBe(false);
+
+            extraAction.classList.remove('mes_button');
+            observerCallback([
+                { type: 'attributes', attributeName: 'class', target: extraAction, oldValue: 'mes_button' },
+            ]);
+            expect(rafQueue.length).toBe(1);
+            rafQueue.shift()();
+            expect(extraAction.attributes.get('tabindex')).toBe('0');
+
+            // Dynamic registerInteractableType refreshes the #chat relevant class index.
+            keyboardModule.registerInteractableType('.custom_box .custom_btn');
+            const customBox = mesRow.appendChild(new MockElement('div', []));
+            const customBtn = customBox.appendChild(new MockElement('div', ['custom_btn']));
+            observerCallback([
+                { type: 'childList', addedNodes: [customBox] },
+            ]);
+            rafQueue.shift()();
+            expect(customBtn.hasAttribute('tabindex')).toBe(false);
+
+            customBox.classList.add('custom_box');
+            observerCallback([
+                { type: 'attributes', attributeName: 'class', target: customBox, oldValue: '' },
+            ]);
+            expect(rafQueue.length).toBe(1);
+            rafQueue.shift()();
+            expect(customBtn.attributes.get('tabindex')).toBe('0');
 
             // Ancestor disabled toggle inside #chat MUST schedule and update descendant .mes_button tabindex.
             mesButtons.classList.add('disabled');
@@ -431,5 +500,176 @@ describe('Pending Ownership Core Fixes (WP-2)', () => {
             global.document = prevGlobals.document;
             global.requestAnimationFrame = prevGlobals.requestAnimationFrame;
         }
+    });
+
+    test('characters.js preserves root name and tags on legacy V2 cards where data.name and data.tags are undefined', async () => {
+        const avatarName = 'LegacyRootCard.png';
+        fs.writeFileSync(path.join(directories.characters, avatarName), 'placeholder-png-bytes');
+
+        const legacyV2Payload = JSON.stringify({
+            name: 'LegacyRootAlice',
+            tags: ['legacy-tag'],
+            spec: 'chara_card_v2',
+            spec_version: '2.0',
+            data: {
+                description: 'V2 data without data.name',
+                first_mes: 'Greetings!',
+                extensions: {
+                    fav: true,
+                },
+            },
+        });
+
+        jest.spyOn(charactersModule.diskCache, 'instance').mockResolvedValue(/** @type {any} */ ({
+            getItem: jest.fn().mockResolvedValue(legacyV2Payload),
+            setItem: jest.fn().mockResolvedValue(undefined),
+        }));
+
+        const handler = getFinalRouteHandler(charactersModule.router, 'post', '/get');
+        const result = await invokeHandler(handler, {
+            body: { avatar_url: avatarName },
+            user: { directories },
+        });
+        expect(result.statusCode).toBe(200);
+        expect(result.payload.name).toBe('LegacyRootAlice');
+        expect(result.payload.tags).toEqual(['legacy-tag']);
+        expect(result.payload.description).toBe('V2 data without data.name');
+    });
+
+    test('saveChatConditional aborts cross-chat drift during lock wait and propagates boolean save status', async () => {
+        const scriptPath = fileURLToPath(new URL('../public/script.js', import.meta.url));
+        const scriptSource = fs.readFileSync(scriptPath, 'utf8');
+
+        const extractExportedAsyncFn = (src, fnName) => {
+            const marker = `export async function ${fnName}(`;
+            const start = src.indexOf(marker);
+            expect(start).toBeGreaterThanOrEqual(0);
+            const bodyStart = src.indexOf(') {', start);
+            expect(bodyStart).toBeGreaterThan(start);
+            let depth = 0;
+            for (let i = bodyStart + 2; i < src.length; i++) {
+                const ch = src[i];
+                if (ch === '{') {
+                    depth += 1;
+                } else if (ch === '}') {
+                    depth -= 1;
+                    if (depth === 0) {
+                        return src.slice(start + 'export '.length, i + 1);
+                    }
+                }
+            }
+            throw new Error(`Failed to extract ${fnName}`);
+        };
+
+        const saveChatCode = extractExportedAsyncFn(scriptSource, 'saveChat');
+        const saveChatConditionalCode = extractExportedAsyncFn(scriptSource, 'saveChatConditional');
+
+        const state = {
+            chat: [{ mes: 'Alice edited floor' }],
+            selected_group: null,
+            this_chid: 0,
+            characters: [
+                { avatar: 'Alice.png', chat: 'main', name: 'Alice' },
+                { avatar: 'Bob.png', chat: 'main', name: 'Bob' },
+            ],
+            chat_metadata: { integrity: 'hash-a' },
+            name1: 'User',
+            name2: 'Alice',
+            neutralCharacterName: 'System',
+            isChatSaving: false,
+            fetchRequests: [],
+            nextFetchOk: true,
+            tokenCacheSaved: 0,
+            itemizedSaved: [],
+            waitHook: null,
+        };
+
+        const vmModule = await import('node:vm');
+        const context = vmModule.createContext({
+            console: { warn: () => {}, error: () => {}, trace: () => {} },
+            Date,
+            Error,
+            Array,
+            Object,
+            JSON,
+            DEFAULT_SAVE_EDIT_TIMEOUT: 1000,
+            get chat() { return state.chat; },
+            get selected_group() { return state.selected_group; },
+            get this_chid() { return state.this_chid; },
+            get characters() { return state.characters; },
+            get chat_metadata() { return state.chat_metadata; },
+            get name1() { return state.name1; },
+            get name2() { return state.name2; },
+            get neutralCharacterName() { return state.neutralCharacterName; },
+            get isChatSaving() { return state.isChatSaving; },
+            set isChatSaving(val) { state.isChatSaving = val; },
+            getCurrentChatId: () => state.selected_group ? 'group-chat' : state.characters[state.this_chid]?.chat,
+            getRequestHeaders: () => ({ 'Content-Type': 'application/json' }),
+            compressRequest: async (req) => req,
+            cancelDebouncedChatSave: () => {},
+            Number,
+            waitUntilCondition: async (cond) => {
+                if (state.waitHook) {
+                    await state.waitHook();
+                }
+                if (!cond()) {
+                    throw new Error('Timed out');
+                }
+            },
+            fetch: async (url, init) => {
+                state.fetchRequests.push({ url, body: JSON.parse(init.body) });
+                if (state.nextFetchOk) {
+                    return { ok: true, status: 200, json: async () => ({ result: 'ok' }) };
+                }
+                return { ok: false, status: 500, json: async () => ({ error: 'disk full' }) };
+            },
+            saveGroupChat: async () => true,
+            saveTokenCache: () => { state.tokenCacheSaved += 1; },
+            saveItemizedPrompts: (id) => { state.itemizedSaved.push(id); },
+            toastr: { error: () => {} },
+            t: (strings) => Array.isArray(strings) ? strings.join('') : String(strings),
+            Popup: { show: { input: async () => '' } },
+            window: { location: { reload: () => {} } },
+        });
+
+        vmModule.runInContext(`${saveChatCode}\n${saveChatConditionalCode}\nglobalThis.fns = { saveChat, saveChatConditional };`, context);
+        const { saveChatConditional } = context.fns;
+
+        // 1. Happy path returns true and saves Alice's 'main' chat.
+        expect(await saveChatConditional()).toBe(true);
+        expect(state.fetchRequests).toHaveLength(1);
+        expect(state.fetchRequests[0].body.avatar_url).toBe('Alice.png');
+        expect(state.tokenCacheSaved).toBe(1);
+
+        // 2. HTTP 500 returns false and skips saveTokenCache / saveItemizedPrompts.
+        state.nextFetchOk = false;
+        expect(await saveChatConditional()).toBe(false);
+        expect(state.fetchRequests).toHaveLength(2);
+        expect(state.tokenCacheSaved).toBe(1);
+
+        // 3. Same-filename ('main') switch from Alice.png to Bob.png during lock wait aborts without calling fetch!
+        state.nextFetchOk = true;
+        state.isChatSaving = true;
+        state.waitHook = async () => {
+            // Simulate in-flight save finishing while user switched to Bob ('main' chat on both!)
+            state.this_chid = 1;
+            state.name2 = 'Bob';
+            state.chat = [{ mes: 'Bob untouched floor' }];
+            state.isChatSaving = false;
+        };
+        expect(await saveChatConditional()).toBe(false);
+        // No save request was sent for Bob!
+        expect(state.fetchRequests).toHaveLength(2);
+    });
+
+    test('world-info.js dry-run guards suppress global scan events and preserve externalActivations', () => {
+        const wiPath = fileURLToPath(new URL('../public/scripts/world-info.js', import.meta.url));
+        const wiSource = fs.readFileSync(wiPath, 'utf8');
+
+        expect(wiSource).toContain('export async function getSortedEntries({ isDryRun = false } = {})');
+        expect(wiSource).toMatch(/if\s*\(!isDryRun\)\s*\{\s*await eventSource\.emit\(event_types\.WORLDINFO_ENTRIES_LOADED/);
+        expect(wiSource).toContain('const sortedEntries = await getSortedEntries({ isDryRun });');
+        expect(wiSource).toMatch(/if\s*\(!isDryRun\)\s*\{\s*await eventSource\.emit\(event_types\.WORLDINFO_SCAN_DONE/);
+        expect(wiSource).toMatch(/if\s*\(!isDryRun\)\s*\{\s*buffer\.resetExternalEffects\(\);\s*\}/);
     });
 });

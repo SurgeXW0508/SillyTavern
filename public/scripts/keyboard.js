@@ -33,13 +33,51 @@ if (CSS.supports('selector(:has(*))')) {
     interactableSelectors.push('#extensionsMenu div:has(.extensionsMenuExtensionButton)');
 }
 
-let combinedInteractableSelector = interactableSelectors.join(', ');
-
 export const INTERACTABLE_CONTROL_CLASS = 'interactable';
 export const CUSTOM_INTERACTABLE_CONTROL_CLASS = 'custom_interactable';
 
 export const NOT_FOCUSABLE_CONTROL_CLASS = 'not_focusable';
 export const DISABLED_CONTROL_CLASS = 'disabled';
+
+const KEYBOARD_BASE_RELEVANT_CLASSES = [
+    INTERACTABLE_CONTROL_CLASS,
+    CUSTOM_INTERACTABLE_CONTROL_CLASS,
+    NOT_FOCUSABLE_CONTROL_CLASS,
+    DISABLED_CONTROL_CLASS,
+    'scroll-reset-container',
+];
+const KEYBOARD_SELECTOR_CLASS_TOKEN_REGEX = /\.([^\s.,>+~:#[\]()'"]+)/g;
+
+let combinedInteractableSelector = '';
+/** @type {Set<string>} */
+let relevantKeyboardClasses = new Set();
+let hasComplexClassAttributeSelector = false;
+
+/**
+ * Rebuilds the combined selector string and extracts all class tokens referenced
+ * anywhere in interactableSelectors (including ancestor combinators like `.mes_buttons .mes_button`).
+ */
+function rebuildKeyboardSelectorIndex() {
+    combinedInteractableSelector = interactableSelectors.join(', ');
+    const nextClasses = new Set(KEYBOARD_BASE_RELEVANT_CLASSES);
+    let complexClassAttr = false;
+
+    for (const selector of interactableSelectors) {
+        if (/\[\s*class\b/i.test(selector)) {
+            complexClassAttr = true;
+        }
+        for (const match of selector.matchAll(KEYBOARD_SELECTOR_CLASS_TOKEN_REGEX)) {
+            if (match[1]) {
+                nextClasses.add(match[1]);
+            }
+        }
+    }
+
+    relevantKeyboardClasses = nextClasses;
+    hasComplexClassAttributeSelector = complexClassAttr;
+}
+
+rebuildKeyboardSelectorIndex();
 
 const KEYBOARD_FULL_SCAN_THRESHOLD = 40;
 /** @type {Set<Element>} */
@@ -107,18 +145,35 @@ export function flushPendingKeyboardNodes() {
 }
 
 /**
- * Checks whether a class mutation toggled focus-inhibiting state classes on an ancestor container.
+ * Checks whether a class mutation added or removed any class referenced by keyboard
+ * interactable selectors (including ancestor classes), focus-inhibiting state classes,
+ * or scroll-reset containers.
  * @param {Element} target
  * @param {string|null} oldValue
  * @returns {boolean}
  */
-function hasFocusStateClassChanged(target, oldValue) {
-    if (typeof oldValue !== 'string') {
-        return target.classList.contains(DISABLED_CONTROL_CLASS) || target.classList.contains(NOT_FOCUSABLE_CONTROL_CLASS);
+function hasRelevantKeyboardClassChanged(target, oldValue) {
+    if (hasComplexClassAttributeSelector || typeof oldValue !== 'string') {
+        return true;
     }
-    const prevClasses = oldValue.split(/\s+/);
-    return prevClasses.includes(DISABLED_CONTROL_CLASS) !== target.classList.contains(DISABLED_CONTROL_CLASS)
-        || prevClasses.includes(NOT_FOCUSABLE_CONTROL_CLASS) !== target.classList.contains(NOT_FOCUSABLE_CONTROL_CLASS);
+
+    const prevSet = new Set(oldValue.split(/\s+/).filter(Boolean));
+    for (const prevClass of prevSet) {
+        if (relevantKeyboardClasses.has(prevClass) && !target.classList.contains(prevClass)) {
+            return true;
+        }
+    }
+
+    const currentClassName = typeof target.className === 'string'
+        ? target.className
+        : (target.getAttribute('class') ?? '');
+    for (const currClass of currentClassName.split(/\s+/).filter(Boolean)) {
+        if (relevantKeyboardClasses.has(currClass) && !prevSet.has(currClass)) {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 /**
@@ -136,10 +191,7 @@ const observer = new MutationObserver(mutations => {
         } else if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
             const target = mutation.target;
             if (target instanceof Element) {
-                if (target.closest('#chat')
-                    && !isKeyboardInteractable(target)
-                    && !target.classList.contains('scroll-reset-container')
-                    && !hasFocusStateClassChanged(target, mutation.oldValue)) {
+                if (target.closest('#chat') && !hasRelevantKeyboardClassChanged(target, mutation.oldValue)) {
                     continue;
                 }
                 pendingKeyboardNodes.add(target);
@@ -183,7 +235,7 @@ function handleNodeChange(node) {
  */
 export function registerInteractableType(interactableSelector, { disabledByDefault = false, notFocusableByDefault = false } = {}) {
     interactableSelectors.push(interactableSelector);
-    combinedInteractableSelector = interactableSelectors.join(', ');
+    rebuildKeyboardSelectorIndex();
 
     const interactables = document.querySelectorAll(interactableSelector);
 

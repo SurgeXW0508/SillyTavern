@@ -4611,7 +4611,7 @@ async function getPersonaLore() {
     return entries;
 }
 
-export async function getSortedEntries() {
+export async function getSortedEntries({ isDryRun = false } = {}) {
     try {
         const [
             globalLore,
@@ -4625,7 +4625,9 @@ export async function getSortedEntries() {
             getPersonaLore(),
         ]);
 
-        await eventSource.emit(event_types.WORLDINFO_ENTRIES_LOADED, { globalLore, characterLore, chatLore, personaLore });
+        if (!isDryRun) {
+            await eventSource.emit(event_types.WORLDINFO_ENTRIES_LOADED, { globalLore, characterLore, chatLore, personaLore });
+        }
 
         let entries;
 
@@ -4765,7 +4767,7 @@ export async function checkWorldInfo(chat, maxContext, isDryRun, globalScanData 
     }
 
     console.debug(`[WI] Context size: ${maxContext}; WI budget: ${budget} (max% = ${world_info_budget}%, cap = ${world_info_budget_cap})`);
-    const sortedEntries = await getSortedEntries();
+    const sortedEntries = await getSortedEntries({ isDryRun });
     const timedEffects = new WorldInfoTimedEffects(chat, sortedEntries, isDryRun);
 
     timedEffects.checkTimedEffects();
@@ -5196,18 +5198,20 @@ export async function checkWorldInfo(chat, maxContext, isDryRun, globalScanData 
             },
             timedEffects,
         };
-        await eventSource.emit(event_types.WORLDINFO_SCAN_DONE, args);
+        if (!isDryRun) {
+            await eventSource.emit(event_types.WORLDINFO_SCAN_DONE, args);
 
-        // Some fields are allowed to be changed by listeners, those will be handled here manually. They can be updated via changed the args from the listeners.
-        // Any array provided directly can be modified by updating it's elements, adding or removing elements. This has to be done consistently.
-        if (args.state.next !== scanState) {
-            logNextState('[WI] Scan state changed from', scanState, 'to', args.state.next);
-            scanState = args.state.next;
+            // Some fields are allowed to be changed by listeners, those will be handled here manually. They can be updated via changed the args from the listeners.
+            // Any array provided directly can be modified by updating it's elements, adding or removing elements. This has to be done consistently.
+            if (args.state.next !== scanState) {
+                logNextState('[WI] Scan state changed from', scanState, 'to', args.state.next);
+                scanState = args.state.next;
+            }
+            allActivatedText = args.activated.text;
+            currentRecursionDelayLevel = args.recursionDelay.currentLevel;
+            budget = args.budget.current;
+            token_budget_overflowed = args.budget.overflowed;
         }
-        allActivatedText = args.activated.text;
-        currentRecursionDelayLevel = args.recursionDelay.currentLevel;
-        budget = args.budget.current;
-        token_budget_overflowed = args.budget.overflowed;
     }
 
     console.debug('[WI] --- BUILDING PROMPT ---');
@@ -5290,13 +5294,15 @@ export async function checkWorldInfo(chat, maxContext, isDryRun, globalScanData 
     const worldInfoAfter = WIAfterEntries.length ? WIAfterEntries.join('\n') : '';
 
     if (shouldWIAddPrompt) {
-        const originalAN = context.extensionPrompts[NOTE_MODULE_NAME].value;
+        const originalAN = context.extensionPrompts[NOTE_MODULE_NAME]?.value ?? '';
         const ANWithWI = `${ANTopEntries.join('\n')}\n${originalAN}\n${ANBottomEntries.join('\n')}`.replace(/(^\n)|(\n$)/g, '');
         context.setExtensionPrompt(NOTE_MODULE_NAME, ANWithWI, chat_metadata[metadata_keys.position], chat_metadata[metadata_keys.depth], extension_settings.note.allowWIScan, chat_metadata[metadata_keys.role]);
     }
 
     timedEffects.setTimedEffects(Array.from(allActivatedEntries.values()));
-    buffer.resetExternalEffects();
+    if (!isDryRun) {
+        buffer.resetExternalEffects();
+    }
     timedEffects.cleanUp();
 
     console.log(`[WI] ${isDryRun ? 'Hypothetically adding' : 'Adding'} ${allActivatedEntries.size} entries to prompt`, Array.from(allActivatedEntries.values()));

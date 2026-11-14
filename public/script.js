@@ -7452,7 +7452,7 @@ export function saveChatDebounced() {
  * @param {boolean} [options.force] Force the saving despite the integrity check result
  * @param {ChatMessage[]} [options.chatData] Chat snapshot to save instead of the current in-memory chat
  *
- * @returns {Promise<void>}
+ * @returns {Promise<boolean>}
  */
 export async function saveChat({ chatName, withMetadata, mesId, force = false, chatData = undefined } = {}) {
     if (selected_group) {
@@ -7470,12 +7470,12 @@ export async function saveChat({ chatName, withMetadata, mesId, force = false, c
 
     if (!fileName && name2 === neutralCharacterName) {
         // TODO: Do something for a temporary chat with no character.
-        return;
+        return false;
     }
 
     if (!fileName) {
         console.warn('saveChat called without chat_name and no chat file found');
-        return;
+        return false;
     }
 
     characters[this_chid].date_last_chat = Date.now();
@@ -7509,7 +7509,7 @@ export async function saveChat({ chatName, withMetadata, mesId, force = false, c
         const result = await fetch('/api/chats/save', saveChatRequest);
 
         if (result.ok) {
-            return;
+            return true;
         }
 
         const errorData = await result.json();
@@ -7531,13 +7531,14 @@ export async function saveChat({ chatName, withMetadata, mesId, force = false, c
         if (!forceSaveConfirmed) {
             console.warn('Chat integrity check failed, and user did not confirm the overwrite. Reloading the page.');
             window.location.reload();
-            return;
+            return false;
         }
 
-        await saveChat({ chatName, withMetadata, mesId, force: true });
+        return await saveChat({ chatName, withMetadata, mesId, force: true, chatData });
     } catch (error) {
         console.error(error);
         toastr.error(t`Check the server connection and reload the page to prevent data loss.`, t`Chat could not be saved`);
+        return false;
     }
 }
 
@@ -9472,11 +9473,29 @@ export async function saveMetadata() {
 }
 
 export async function saveChatConditional() {
+    const targetChatRef = chat;
+    const targetGroup = selected_group;
+    const targetChid = this_chid;
+    const targetAvatar = !selected_group && this_chid !== undefined ? characters[this_chid]?.avatar : undefined;
+    const targetChatId = getCurrentChatId();
+
     try {
         await waitUntilCondition(() => !isChatSaving, DEFAULT_SAVE_EDIT_TIMEOUT, 100);
     } catch {
         console.warn('Timeout waiting for chat to save');
-        return;
+        return false;
+    }
+
+    const currentAvatar = !selected_group && this_chid !== undefined ? characters[this_chid]?.avatar : undefined;
+    if (
+        chat !== targetChatRef
+        || selected_group !== targetGroup
+        || this_chid !== targetChid
+        || currentAvatar !== targetAvatar
+        || getCurrentChatId() !== targetChatId
+    ) {
+        console.warn('Active chat changed while waiting for chat save lock; aborting stale saveChatConditional');
+        return false;
     }
 
     try {
@@ -9484,17 +9503,21 @@ export async function saveChatConditional() {
 
         isChatSaving = true;
 
-        if (selected_group) {
-            await saveGroupChat(selected_group, true);
-        } else {
-            await saveChat();
+        const saved = selected_group
+            ? await saveGroupChat(selected_group, true)
+            : await saveChat();
+
+        if (!saved) {
+            return false;
         }
 
         // Save token and prompts cache to IndexedDB storage
         saveTokenCache();
         saveItemizedPrompts(getCurrentChatId());
+        return true;
     } catch (error) {
         console.error('Error saving chat', error);
+        return false;
     } finally {
         isChatSaving = false;
     }

@@ -618,13 +618,13 @@ function resetSelectedGroup() {
  * @param {string} groupId Group ID
  * @param {boolean} shouldSaveGroup Whether to save the group after saving the chat
  * @param {boolean} force Force the saving on integrity error
- * @returns {Promise<void>} A promise that resolves when the group chat has been saved.
+ * @returns {Promise<boolean>} A promise that resolves to whether the group chat was saved.
  */
 async function saveGroupChat(groupId, shouldSaveGroup, force = false) {
     const group = groups.find(x => x.id == groupId);
     if (!group) {
         console.warn('Group not found', groupId);
-        return;
+        return false;
     }
     const chatId = group.chat_id;
     group.date_last_chat = Date.now();
@@ -647,7 +647,7 @@ async function saveGroupChat(groupId, shouldSaveGroup, force = false) {
         if (!isIntegrityError) {
             toastr.error(t`Check the server connection and reload the page to prevent data loss.`, t`Group Chat could not be saved`);
             console.error('Group chat could not be saved', response);
-            return;
+            return false;
         }
 
         const popupResult = await Popup.show.input(
@@ -663,15 +663,16 @@ async function saveGroupChat(groupId, shouldSaveGroup, force = false) {
         if (!forceSaveConfirmed) {
             console.warn('Chat integrity check failed, and user did not confirm the overwrite. Reloading the page.');
             window.location.reload();
-            return;
+            return false;
         }
 
-        await saveGroupChat(groupId, shouldSaveGroup, true);
+        return await saveGroupChat(groupId, shouldSaveGroup, true);
     }
 
     if (shouldSaveGroup) {
         await editGroup(groupId, false, false);
     }
+    return true;
 }
 
 /**
