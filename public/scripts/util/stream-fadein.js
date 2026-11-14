@@ -1,6 +1,42 @@
 import { morphdom } from '../../lib.js';
 
 /**
+ * Creates a content writer scoped to one streaming or reasoning handler instance.
+ * Formatting still runs on every update; only identical connected DOM writes are
+ * skipped, and state is recorded only after a write succeeds.
+ * Adapted from Shalistera/SillyTavern@01b87c88 (AGPL-3.0).
+ * @returns {(element: HTMLElement, html: string, fade: boolean, force?: boolean) => boolean} Whether content was written
+ */
+export function createStreamingContentUpdater() {
+    /** @type {HTMLElement|null} */
+    let lastElement = null;
+    /** @type {string|undefined} */
+    let lastHtml;
+    /** @type {boolean|undefined} */
+    let lastFade;
+
+    return (element, html, fade, force = false) => {
+        const normalizedFade = Boolean(fade);
+        if (!force
+            && element === lastElement
+            && element?.isConnected === true
+            && html === lastHtml
+            && normalizedFade === lastFade) {
+            return false;
+        }
+        if (normalizedFade) {
+            applyStreamFadeIn(element, html);
+        } else {
+            element.innerHTML = html;
+        }
+        lastElement = element;
+        lastHtml = html;
+        lastFade = normalizedFade;
+        return true;
+    };
+}
+
+/**
  * Check if the current browser supports native segmentation function.
  * @returns {boolean} True if the Segmenter is supported by the current browser.
  */

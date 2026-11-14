@@ -278,7 +278,8 @@ import { clearItemizedPrompts, deleteItemizedPromptForMessage, deleteItemizedPro
 import { getSystemMessageByType, initSystemMessages, SAFETY_CHAT, sendSystemMessage, system_message_types, system_messages } from './scripts/system-messages.js';
 import { event_types, eventSource } from './scripts/events.js';
 import { initAccessibility } from './scripts/a11y.js';
-import { applyStreamFadeIn } from './scripts/util/stream-fadein.js';
+import { createStreamingContentUpdater } from './scripts/util/stream-fadein.js';
+import { getMessageDepth } from './scripts/util/message-depth.js';
 import { initDomHandlers } from './scripts/dom-handlers.js';
 import { SimpleMutex } from './scripts/util/SimpleMutex.js';
 import { AudioPlayer } from './scripts/audio-player.js';
@@ -1849,9 +1850,7 @@ export function messageFormatting(mes, ch_name, isSystem, isUser, messageId, san
         }
 
         const regexPlacement = getRegexPlacement();
-        const usableMessages = chat.map((x, index) => ({ message: x, index: index })).filter(x => !x.message.is_system);
-        const indexOf = usableMessages.findIndex(x => x.index === Number(messageId));
-        const depth = messageId >= 0 && indexOf !== -1 ? (usableMessages.length - indexOf - 1) : undefined;
+        const depth = getMessageDepth(chat, messageId);
 
         mes = MessageFormatter.runStage(MessageFormatter.stage.BEFORE_REGEX, mes,
             { ch_name, isSystem, isUser, messageId, isReasoning },
@@ -3539,6 +3538,8 @@ function hideStopButton() {
 }
 
 class StreamingProcessor {
+    #updateStreamingContent = createStreamingContentUpdater();
+
     /**
      * Creates a new streaming processor.
      * @param {string} type Generation type
@@ -3723,11 +3724,7 @@ class StreamingProcessor {
                 false,
             );
             if (this.messageTextDom instanceof HTMLElement) {
-                if (power_user.stream_fade_in) {
-                    applyStreamFadeIn(this.messageTextDom, formattedText);
-                } else {
-                    this.messageTextDom.innerHTML = formattedText;
-                }
+                this.#updateStreamingContent(this.messageTextDom, formattedText, power_user.stream_fade_in, Boolean(isFinal));
             }
 
             const timePassed = formatGenerationTimer(this.timeStarted, currentTime, currentTokenCount, this.reasoningHandler.getDuration(), this.timeToFirstToken);

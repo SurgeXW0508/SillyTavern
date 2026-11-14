@@ -15,7 +15,7 @@ import { commonEnumProviders, enumIcons } from './slash-commands/SlashCommandCom
 import { enumTypes, SlashCommandEnumValue } from './slash-commands/SlashCommandEnumValue.js';
 import { SlashCommandParser } from './slash-commands/SlashCommandParser.js';
 import { textgen_types, textgenerationwebui_settings } from './textgen-settings.js';
-import { applyStreamFadeIn } from './util/stream-fadein.js';
+import { createStreamingContentUpdater } from './util/stream-fadein.js';
 import { copyText, escapeRegex, isFalseBoolean, isTrueBoolean, setDatasetProperty, stringToRange, trimSpaces } from './utils.js';
 
 /**
@@ -276,6 +276,8 @@ export const ReasoningState = {
  * This class is used inside the {@link StreamingProcessor} to manage reasoning states and UI updates.
  */
 export class ReasoningHandler {
+    #updateStreamingContent = createStreamingContentUpdater();
+
     /** @type {boolean} True if the model supports reasoning, but hides the reasoning output */
     #isHiddenReasoningModel;
     /** @type {boolean} True if the handler is currently handling a manual parse of reasoning blocks */
@@ -384,7 +386,7 @@ export class ReasoningHandler {
             this.endTime = null;
         }
 
-        this.updateDom(messageId);
+        this.updateDom(messageId, { force: true });
 
         if (power_user.reasoning.auto_expand && this.messageReasoningDetailsDom.dataset.hasContent === 'true') {
             this.messageReasoningDetailsDom.open = true;
@@ -551,7 +553,7 @@ export class ReasoningHandler {
             await eventSource.emit(event_types.STREAM_REASONING_DONE, this.reasoning, this.getDuration(), messageId, this.state);
         }
 
-        this.updateDom(messageId);
+        this.updateDom(messageId, { force: true });
     }
 
     /**
@@ -560,8 +562,10 @@ export class ReasoningHandler {
      * Toggles the CSS class, updates states, reasoning message, and duration.
      *
      * @param {number} messageId - The ID of the message to update
+     * @param {object} [options] - Content update options
+     * @param {boolean} [options.force=false] - Force final content reconciliation
      */
-    updateDom(messageId) {
+    updateDom(messageId, { force = false } = {}) {
         this.#checkDomElements(messageId);
 
         // Main CSS class to show this message includes reasoning
@@ -581,11 +585,7 @@ export class ReasoningHandler {
         setDatasetProperty(this.messageReasoningDetailsDom, 'hasContent', hasReasoningContent ? 'true' : null);
         const displayReasoning = messageFormatting(reasoning, '', false, false, messageId, {}, true);
 
-        if (power_user.stream_fade_in) {
-            applyStreamFadeIn(this.messageReasoningContentDom, displayReasoning);
-        } else {
-            this.messageReasoningContentDom.innerHTML = displayReasoning;
-        }
+        this.#updateStreamingContent(this.messageReasoningContentDom, displayReasoning, power_user.stream_fade_in, force);
 
         // Update tooltip for hidden reasoning edit
         /** @type {HTMLElement} */
