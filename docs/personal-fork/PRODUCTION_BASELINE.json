@@ -252,7 +252,7 @@
   "baibai_1_2_0_and_pending_closeout_candidate": {
     "verified_at": "2026-11-14",
     "sillytavern_candidate_branch": "stage/baibai-sync-1.2.0",
-    "sillytavern_candidate_runtime_commit": "270f243a78cdd8bbce44a4bd36a1c76cb915b44c",
+    "sillytavern_candidate_runtime_commit": "5c02da4f1bf865dce85558f14bcbd91f949f823a",
     "tools_candidate_branch": "candidate/baibai-1.2.0",
     "tools_candidate_commit": "595854eeaf36fc05ecd380639d3013048693c768",
     "tools_candidate_runtime_commit": "1e8d5a818e19c7deafee42808aa39033c25170a1",
