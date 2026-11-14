@@ -1,5 +1,8 @@
 # Phase C Final Delta Audit
 
+> [!NOTE]
+> 本文为 2026-11-09 Phase C（`v1.19.0-personal.1` / Runtime `090cbba6`）冻结差异归档记录。2026-11-12 起经授权合入或候选验证的后续变更（含 Vertex 收尾、世界书性能优化、三项 Pending Ownership 收口及 `saveChat`/`saveGroupChat`/`saveChatConditional` 返回 `Promise<boolean>` 契约）以 [MAINTENANCE_COMPATIBILITY.md](MAINTENANCE_COMPATIBILITY.md) 与 [PRODUCTION_BASELINE.json](PRODUCTION_BASELINE.json) 为唯一现行依据。
+
 2026-11-09。本轮是冻结差异与发布边界核查，不再逐行审计、不增加Vertex能力。Runtime保持`090cbba6d40e5d117ab41a9e6deb20b40e2dc336`；输入Stage为`8f8c5fb02fe56ec186c3719fc9a7e3ce359a98a6`；两者差异仅两份文档。官方release和原个人release均为`06bde939fb1e9c4c8d8641d810f0a916b5bce127`；Shalistera当前仍为`f67e000034a130dc25c7fb7571b5731f4c219f89`。
 
 ## 结论

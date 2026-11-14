@@ -1,6 +1,7 @@
 # Phase C Deployment Handoff
 
-> C-E0历史交接：以下本地Candidate构建命令保留作过程记录，不再作为长期正式部署入口。当前正式制品和NAS更新/回滚见[Personal Release Operations](PERSONAL_RELEASE_OPERATIONS.md)及对应GitHub Release的Validated Stack。
+> [!NOTE]
+> C-E0（2026-11-09，`v1.19.0-personal.1`）历史交接归档：以下本地 Candidate 构建命令与冻结组件快照保留作过程记录，不再代表当前 GitHub 分支 HEAD 或长期部署入口。现行正式制品、飞牛 Compose 更新流程与后续阶段进展见 [Personal Release Operations](PERSONAL_RELEASE_OPERATIONS.md)、[PRODUCTION_BASELINE.json](PRODUCTION_BASELINE.json) 与 [MAINTENANCE_COMPATIBILITY.md](MAINTENANCE_COMPATIBILITY.md)。
 
 2026-11-09 · C-E0文档交接。供用户后续在ChatGPT指导下手工操作NAS。本文所有NAS命令均未由Work执行；没有部署、生产配置修改、真实Google验证或生产回滚验证。Owner规则唯一来源：[MAINTENANCE_COMPATIBILITY.md](MAINTENANCE_COMPATIBILITY.md)。
 

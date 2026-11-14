@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-11-13",
+  "updated_at": "2026-11-14",
   "phase_c_status": "formal_ghcr_deployed_basic_smoke_passed",
   "current_production": {
     "source": "user_provided_nas_results_2026-11-09",
@@ -252,16 +252,18 @@
   "baibai_1_2_0_and_pending_closeout_candidate": {
     "verified_at": "2026-11-14",
     "sillytavern_candidate_branch": "stage/baibai-sync-1.2.0",
-    "sillytavern_candidate_runtime_commit": "bc262a27c0aa8766bbd1bc50e04106be8304b094",
+    "sillytavern_candidate_runtime_commit": "3c9abc9d8e45f75b657a1c6cfc4b7653d72ca057",
     "tools_candidate_branch": "candidate/baibai-1.2.0",
-    "tools_candidate_commit": "0b6747739d0f9a5624778b1a5d2ac3dde0d9447a",
+    "tools_candidate_commit": "595854eeaf36fc05ecd380639d3013048693c768",
+    "tools_candidate_runtime_commit": "1e8d5a818e19c7deafee42808aa39033c25170a1",
     "tools_upstream_mirror_main_commit": "d828d6812994414cef24be9e5f995a264e9fe370",
-    "tools_dist_index_js_sha256": "2941e20b946ed6b28f735a2d9d5aa842bd591bdc4a8e061c74942e6bcde5d5b4",
+    "tools_dist_index_js_sha256": "6baecc06b1e9dbf2dcbb1593e991d684533f6600f4c056f04bda6d55c3aa779d",
     "tools_dist_index_css_sha256": "91145ed0b143775ef0e352408afd372370cfa92a388397bb8607dc16a23eeef6",
     "baibaoku_candidate_branch": "candidate/baibai-0.7.4",
-    "baibaoku_candidate_commit": "459eab2e16debccf1e091f7ea565f7c422df03a1",
+    "baibaoku_candidate_commit": "5ee226f1ec8a6e2e3cf3127cdb3999a89a952d58",
+    "baibaoku_candidate_runtime_commit": "7a64453598ce3824fd6649ac6ea481cd8df6d467",
     "baibaoku_upstream_mirror_main_commit": "d915bc8f0036fb308f02b9a9e52ae880f05d4fe4",
-    "scope": "baibai_tools_1_2_0_pen_round2_target_binding_and_fetch_pipeline_baibaoku_0_7_4_fast_save_monotonic_seq_and_legacy_v2_cards_and_all_three_code_pending_ownership_chains_closed",
+    "scope": "baibai_tools_1_2_0_pen_round2_and_final_premerge_hardening_foreign_wrapper_safe_fetch_pipeline_baibaoku_0_7_4_fast_save_seq_legacy_v2_and_chat_tail_containment_parity_and_all_three_code_pending_ownership_chains_closed",
     "merged_to_release_or_personal_stable": false,
     "personal_release_json_updated": false,
     "ghcr_image_built": false,
@@ -269,7 +271,7 @@
     "status": "candidate_verified_awaiting_merge_authorization"
   },
   "repository_heads": {
-    "verified_at": "2026-11-13",
+    "verified_at": "2026-11-14",
     "sillytavern_upstream_release": "06bde939fb1e9c4c8d8641d810f0a916b5bce127",
     "sillytavern_release_runtime_commit": "e92f8dc4dc2b6bed036567e9df6de3c376ffba6d",
     "sillytavern_release_delta_from_production": "vertex_and_perf_ownership_milestones_merged_to_release_pending_unified_ghcr_release",

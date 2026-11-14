@@ -1,5 +1,8 @@
 # Phase C Release Closeout — 2026-11-09
 
+> [!NOTE]
+> 本文为 `v1.19.0-personal.1`（2026-11-09）发行与首次 NAS 实机切换归档快照。后续三仓库分支推进（含柏宝库个人 Fork 建仓及 2026-11-12 ~ 2026-11-14 阶段合入/候选验证）详见 [PRODUCTION_BASELINE.json](PRODUCTION_BASELINE.json) 与 [MAINTENANCE_COMPATIBILITY.md](MAINTENANCE_COMPATIBILITY.md)。
+
 **正式GHCR镜像已完成NAS切换和基本实机验收；最终文档提交等待独立审查。** 本轮只登记用户提供的真实结果，没有新的Runtime、插件或生产操作。
 
 ## 当前生产组合

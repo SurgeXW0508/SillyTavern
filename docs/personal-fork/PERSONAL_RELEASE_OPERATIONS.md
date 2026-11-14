@@ -14,7 +14,7 @@ ghcr.io/surgexw0508/sillytavern-personal@sha256:22973f7169fa694a0894b054e2b754cc
 
 2026-11-12再次核验：容器状态为`running`、RestartCount为0；Compose 标签确认项目名为`sillytavern`，WorkingDir为`/vol3/1000/SillyTavern`，配置文件为`/vol3/1000/SillyTavern/docker-compose.yml`。挂载仍将宿主机的`config`、`data`、`plugins`、`extensions`分别映射到容器对应目录；视频目录以只读方式挂载。飞牛 Docker 已正式管理该 Compose 项目，无需迁移管理方式。
 
-NAS Tools实际为`personal/stable@2f6a9c54d2c906b4a0e44d20c12d0712552e393d`，origin为个人Fork，tracking为`origin/personal/stable`，工作区clean。此后本轮在Tools个人stable分支增加的Runbook、AGENTS和README均为文档变更，不包含Runtime或`dist`；NAS实际SHA仍为`2f6a9c54`。BaiBaoKu NAS已于2026-11-12完成Git跟踪关系整理：当前分支`personal/stable`，origin为`SurgeXW0508/baibaoku`，upstream为`baibai-git/baibaoku`，tracking为`origin/personal/stable`，工作区clean；NAS当前Git HEAD为`4814830f`，Runtime仍是`b211a4e97fdaec24dc8b90c85ddc198fac9ac200`（0.7.3），并保留`backup/pre-personal-stable-20261112`。GitHub `origin/personal/stable` 后续新增了3个仅更新维护Runbook的文档提交；NAS尚未fetch这些提交，Runtime无差异。
+NAS Tools实际为`personal/stable@2f6a9c54d2c906b4a0e44d20c12d0712552e393d`，origin为个人Fork，tracking为`origin/personal/stable`，工作区clean。BaiBaoKu NAS已于2026-11-12完成Git跟踪关系整理：当前分支`personal/stable`，origin为`SurgeXW0508/baibaoku`，upstream为`baibai-git/baibaoku`，tracking为`origin/personal/stable`，工作区clean；NAS当前Git HEAD仍停留在2026-11-12检出的`4814830f`，实际运行Runtime仍是`b211a4e97fdaec24dc8b90c85ddc198fac9ac200`（0.7.3），并保留`backup/pre-personal-stable-20261112`。此后GitHub `origin/personal/stable` 已于2026-11-13推进合入性能与归属收敛Runtime（Tools `3314098e` / BaiBaoKu `61aae569`），NAS尚未拉取这些更新；在统一发版前保持NAS三组件版本锁定不动。
 
 正式镜像只确认启动、Health、Vertex普通RP正文生成和刷新后聊天记录保留。Candidate多轮/Stop/Regenerate等历史测试单独记录，未在正式环境复验的能力不标通过。生产数据恢复和安全评估也不由healthy状态代替。
 
@@ -133,8 +133,9 @@ Runtime故障优先回到上一个已验证镜像，同时确认Tools/BaiBaoKu�
 
 ## 当前仓库与发布状态
 
-2026-11-12至2026-11-13维护与阶段合入记录：
+2026-11-12至2026-11-14维护与阶段合入记录：
 
 - 部署流程与分支治理：已确认飞牛Compose图形化更新入口、建立柏宝箱与柏宝库个人维护Runbook，并完成柏宝库NAS Git跟踪关系整理（`personal/stable@4814830f`，跟踪`origin/personal/stable`）。
 - Vertex阶段性收尾合入`release`（2026-11-12）：已将经过内部diff审查与外部安全/协议复核的Vertex收尾分支`stage/vertex-protocol-and-ux`快进合入`release`（阶段Runtime基线`e49a694083cc46dbf883f13eab664076c139011f`）。
 - 三仓库性能优化与能力归属收敛合入`release` / `personal/stable`（2026-11-13）：已完成内部审查、外部复核闭环（含柏宝箱`FX3-1`构建产物路径脱离检出目录依赖与柏宝库`FX3-2`双后端完整`origin`跟踪核验）及真实Chromium三库联跑验收，并按用户授权将`SillyTavern` `stage/perf-worldinfo`快进合入`release`（阶段Runtime基线`e92f8dc4dc2b6bed036567e9df6de3c376ffba6d`）、`ST-BaiBai-Tools` `candidate/perf-worldinfo`快进合入`personal/stable`（`3314098e1f009c253ed399b84b05876791472484`，Runtime/`dist` `61180ebd1e7844b2c9a2e9962520608b3b3bf1b2`）、`baibaoku` `candidate/perf-worldinfo`快进合入`personal/stable`（`61aae5691cc3488310c3834c20699d910e5fc639`，Runtime `9d9854ca244d21c50231936ffbab9ab48a6fba2b`）。按阶段规划暂不修改`personal-release.json`、不创建Tag/GitHub Release、不触发GHCR Docker构建、不更新NAS或重启容器（在此之前请勿在NAS酒馆扩展管理器单独点击更新伴随插件）；待后续未完成链路全部收口后统一发版与实机验证。
+- 柏宝箱 `1.2.0` + 柏宝库 `0.7.4` 同步、两轮外审加固与终论审查修复候选就绪（2026-11-14）：三仓库候选分支（`SillyTavern:stage/baibai-sync-1.2.0`、`ST-BaiBai-Tools:candidate/baibai-1.2.0`、`baibaoku:candidate/baibai-0.7.4`）已完成全部三项代码层 Pending Ownership 收口、两轮外部审查与合入前终论审查修复并通过全套单测与真实 Chromium 三库联跑验收（精确候选 SHA 见 [PRODUCTION_BASELINE.json](PRODUCTION_BASELINE.json) 与 [MAINTENANCE_COMPATIBILITY.md](MAINTENANCE_COMPATIBILITY.md)），当前等待用户明确授权后再快进合入 `release` / `personal/stable`。
