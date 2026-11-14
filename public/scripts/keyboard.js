@@ -80,11 +80,77 @@ function rebuildKeyboardSelectorIndex() {
 rebuildKeyboardSelectorIndex();
 
 const KEYBOARD_FULL_SCAN_THRESHOLD = 40;
+const KEYBOARD_PENDING_QUEUE_CAP = 512;
 /** @type {Set<Element>} */
 const pendingKeyboardNodes = new Set();
+let pendingFullBodyScan = false;
 let keyboardFlushScheduled = false;
 /** @type {WeakSet<Element>} */
 const initializedScrollResetContainers = new WeakSet();
+
+/**
+ * Enqueues a mutated element for next-frame keyboard scanning while bounding memory
+ * retention when requestAnimationFrame is paused in background tabs.
+ * @param {Element} node
+ */
+function enqueuePendingKeyboardNode(node) {
+    if (pendingFullBodyScan) {
+        return;
+    }
+    if (node === document.body || pendingKeyboardNodes.size >= KEYBOARD_PENDING_QUEUE_CAP) {
+        pendingFullBodyScan = true;
+        pendingKeyboardNodes.clear();
+        return;
+    }
+    pendingKeyboardNodes.add(node);
+}
+
+/**
+ * Computes the lowest common ancestor Element for a non-empty list of connected elements.
+ * @param {Element[]} elements
+ * @returns {Element|null}
+ */
+function findLowestCommonAncestor(elements) {
+    if (elements.length === 0) {
+        return null;
+    }
+    /** @type {Element[]} */
+    const chain = [];
+    /** @type {Element|null} */
+    let cursor = elements[0];
+    while (cursor) {
+        chain.push(cursor);
+        cursor = cursor.parentElement;
+    }
+
+    const chainIndex = new Map(chain.map((el, idx) => [el, idx]));
+    let candidateIndex = 0;
+
+    for (let i = 1; i < elements.length; i++) {
+        /** @type {Element|null} */
+        let node = elements[i];
+        let matchedIndex = -1;
+        while (node) {
+            const idx = chainIndex.get(node);
+            if (idx !== undefined) {
+                matchedIndex = idx;
+                break;
+            }
+            node = node.parentElement;
+        }
+        if (matchedIndex === -1) {
+            return null;
+        }
+        if (matchedIndex > candidateIndex) {
+            candidateIndex = matchedIndex;
+            if (candidateIndex === chain.length - 1) {
+                break;
+            }
+        }
+    }
+
+    return chain[candidateIndex] ?? null;
+}
 
 /**
  * Schedules a single animation-frame pass to initialize queued DOM subtrees.
@@ -101,10 +167,22 @@ function scheduleKeyboardNodeFlush() {
 }
 
 /**
- * Processes queued DOM nodes once per frame, collapsing ancestor and storm scans.
+ * Processes queued DOM nodes once per frame, collapsing ancestors first and bounding
+ * high-cardinality bursts to their lowest common ancestor subtree.
  */
-export function flushPendingKeyboardNodes() {
+function flushPendingKeyboardNodes() {
     keyboardFlushScheduled = false;
+    const forceBodyScan = pendingFullBodyScan;
+    pendingFullBodyScan = false;
+
+    if (forceBodyScan) {
+        pendingKeyboardNodes.clear();
+        if (document.body) {
+            handleNodeChange(document.body);
+        }
+        return;
+    }
+
     if (pendingKeyboardNodes.size === 0) {
         return;
     }
@@ -122,12 +200,14 @@ export function flushPendingKeyboardNodes() {
         return;
     }
 
-    if (document.body && (connectedNodes.includes(document.body) || connectedNodes.length > KEYBOARD_FULL_SCAN_THRESHOLD)) {
+    if (document.body && connectedNodes.includes(document.body)) {
         handleNodeChange(document.body);
         return;
     }
 
     const rootSet = new Set(connectedNodes);
+    /** @type {Element[]} */
+    const roots = [];
     for (const node of connectedNodes) {
         let ancestor = node.parentElement;
         let coveredByAncestor = false;
@@ -139,8 +219,20 @@ export function flushPendingKeyboardNodes() {
             ancestor = ancestor.parentElement;
         }
         if (!coveredByAncestor) {
-            handleNodeChange(node);
+            roots.push(node);
         }
+    }
+
+    if (roots.length > KEYBOARD_FULL_SCAN_THRESHOLD) {
+        const scanRoot = findLowestCommonAncestor(roots) ?? document.body;
+        if (scanRoot) {
+            handleNodeChange(scanRoot);
+        }
+        return;
+    }
+
+    for (const root of roots) {
+        handleNodeChange(root);
     }
 }
 
@@ -185,7 +277,7 @@ const observer = new MutationObserver(mutations => {
         if (mutation.type === 'childList') {
             for (const addedNode of mutation.addedNodes) {
                 if (addedNode.nodeType === Node.ELEMENT_NODE && addedNode instanceof Element) {
-                    pendingKeyboardNodes.add(addedNode);
+                    enqueuePendingKeyboardNode(addedNode);
                 }
             }
         } else if (mutation.type === 'attributes' && mutation.attributeName === 'class') {
@@ -194,12 +286,12 @@ const observer = new MutationObserver(mutations => {
                 if (target.closest('#chat') && !hasRelevantKeyboardClassChanged(target, mutation.oldValue)) {
                     continue;
                 }
-                pendingKeyboardNodes.add(target);
+                enqueuePendingKeyboardNode(target);
             }
         }
     }
 
-    if (pendingKeyboardNodes.size > 0) {
+    if (pendingFullBodyScan || pendingKeyboardNodes.size > 0) {
         scheduleKeyboardNodeFlush();
     }
 });

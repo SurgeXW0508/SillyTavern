@@ -478,7 +478,7 @@ describe('Pending Ownership Core Fixes (WP-2)', () => {
             rafQueue.shift()();
             expect(mesBtn.attributes.get('tabindex')).toBe('0');
 
-            // Mutation storm (> 40 added nodes) collapses into a single document.body pass.
+            // Mutation storm (> 40 added nodes directly under body) collapses into a single document.body pass.
             body.querySelectorAllCalls = 0;
             const stormNodes = Array.from({ length: 45 }, () => {
                 const card = body.appendChild(new MockElement('div', ['character_select']));
@@ -491,6 +491,39 @@ describe('Pending Ownership Core Fixes (WP-2)', () => {
             rafQueue.shift()();
             expect(body.querySelectorAllCalls).toBe(2);
             expect(stormNodes.every(card => card.attributes.get('tabindex') === '0' && card.querySelectorAllCalls === 0)).toBe(true);
+
+            // Streaming burst (> 40 sibling nodes inside .mes_text) scans ONLY .mes_text (LCA), NOT document.body!
+            body.querySelectorAllCalls = 0;
+            const mesText = mesRow.appendChild(new MockElement('div', ['mes_text']));
+            const streamParagraphs = Array.from({ length: 48 }, () => {
+                const p = mesText.appendChild(new MockElement('p', []));
+                p.appendChild(new MockElement('div', ['menu_button']));
+                return p;
+            });
+            observerCallback([
+                { type: 'childList', addedNodes: streamParagraphs },
+            ]);
+            expect(rafQueue.length).toBe(1);
+            rafQueue.shift()();
+            expect(body.querySelectorAllCalls).toBe(0);
+            expect(mesText.querySelectorAllCalls).toBe(2);
+            expect(streamParagraphs.every(p => p.children[0].attributes.get('tabindex') === '0')).toBe(true);
+
+            // Background-tab queue overflow (> 512 queued nodes while rAF is paused) caps memory and flushes once via body.
+            body.querySelectorAllCalls = 0;
+            const overflowNodes = Array.from({ length: 530 }, () => {
+                const detached = new MockElement('div', ['menu_button']);
+                detached.isConnected = false;
+                return detached;
+            });
+            const survivingBtn = body.appendChild(new MockElement('div', ['menu_button']));
+            observerCallback([
+                { type: 'childList', addedNodes: [...overflowNodes, survivingBtn] },
+            ]);
+            expect(rafQueue.length).toBe(1);
+            rafQueue.shift()();
+            expect(body.querySelectorAllCalls).toBe(2);
+            expect(survivingBtn.attributes.get('tabindex')).toBe('0');
         } finally {
             global.CSS = prevGlobals.CSS;
             global.Node = prevGlobals.Node;
@@ -536,7 +569,7 @@ describe('Pending Ownership Core Fixes (WP-2)', () => {
         expect(result.payload.description).toBe('V2 data without data.name');
     });
 
-    test('saveChatConditional aborts cross-chat drift during lock wait and propagates boolean save status', async () => {
+    test('saveChatConditional aborts cross-chat drift during lock wait, tolerates same-avatar this_chid reindexing, and propagates boolean save status', async () => {
         const scriptPath = fileURLToPath(new URL('../public/script.js', import.meta.url));
         const scriptSource = fs.readFileSync(scriptPath, 'utf8');
 
@@ -567,8 +600,10 @@ describe('Pending Ownership Core Fixes (WP-2)', () => {
         const state = {
             chat: [{ mes: 'Alice edited floor' }],
             selected_group: null,
-            this_chid: 0,
+            /** @type {number|string|undefined} */
+            this_chid: '1',
             characters: [
+                { avatar: 'Zoe.png', chat: 'zoe-main', name: 'Zoe' },
                 { avatar: 'Alice.png', chat: 'main', name: 'Alice' },
                 { avatar: 'Bob.png', chat: 'main', name: 'Bob' },
             ],
@@ -641,13 +676,27 @@ describe('Pending Ownership Core Fixes (WP-2)', () => {
         expect(state.fetchRequests[0].body.avatar_url).toBe('Alice.png');
         expect(state.tokenCacheSaved).toBe(1);
 
-        // 2. HTTP 500 returns false and skips saveTokenCache / saveItemizedPrompts.
+        // 2. Same character ('Alice.png', 'main') reindexed by getCharacters() ('1' string -> 0 number after deleting Zoe.png) MUST NOT false-abort!
+        state.isChatSaving = true;
+        state.waitHook = async () => {
+            state.characters.shift(); // Removes Zoe.png; Alice.png moves from index 1 to 0
+            state.this_chid = 0; // Numeric index instead of string '1'
+            state.isChatSaving = false;
+        };
+        expect(await saveChatConditional()).toBe(true);
+        expect(state.fetchRequests).toHaveLength(2);
+        expect(state.fetchRequests[1].body.avatar_url).toBe('Alice.png');
+        expect(state.fetchRequests[1].body.file_name).toBe('main');
+        expect(state.tokenCacheSaved).toBe(2);
+        state.waitHook = null;
+
+        // 3. HTTP 500 returns false and skips saveTokenCache / saveItemizedPrompts.
         state.nextFetchOk = false;
         expect(await saveChatConditional()).toBe(false);
-        expect(state.fetchRequests).toHaveLength(2);
-        expect(state.tokenCacheSaved).toBe(1);
+        expect(state.fetchRequests).toHaveLength(3);
+        expect(state.tokenCacheSaved).toBe(2);
 
-        // 3. Same-filename ('main') switch from Alice.png to Bob.png during lock wait aborts without calling fetch!
+        // 4. Same-filename ('main') switch from Alice.png to Bob.png during lock wait aborts without calling fetch!
         state.nextFetchOk = true;
         state.isChatSaving = true;
         state.waitHook = async () => {
@@ -659,7 +708,7 @@ describe('Pending Ownership Core Fixes (WP-2)', () => {
         };
         expect(await saveChatConditional()).toBe(false);
         // No save request was sent for Bob!
-        expect(state.fetchRequests).toHaveLength(2);
+        expect(state.fetchRequests).toHaveLength(3);
     });
 
     test('world-info.js dry-run guards suppress global scan events and preserve externalActivations', () => {

@@ -9473,11 +9473,19 @@ export async function saveMetadata() {
 }
 
 export async function saveChatConditional() {
-    const targetChatRef = chat;
     const targetGroup = selected_group;
-    const targetChid = this_chid;
-    const targetAvatar = !selected_group && this_chid !== undefined ? characters[this_chid]?.avatar : undefined;
+    const targetHasCharacter = !selected_group && this_chid !== undefined;
+    const targetAvatar = targetHasCharacter ? characters[this_chid]?.avatar : undefined;
     const targetChatId = getCurrentChatId();
+
+    const isSameSaveTarget = () => {
+        const currentHasCharacter = !selected_group && this_chid !== undefined;
+        const currentAvatar = currentHasCharacter ? characters[this_chid]?.avatar : undefined;
+        return selected_group === targetGroup
+            && currentHasCharacter === targetHasCharacter
+            && currentAvatar === targetAvatar
+            && getCurrentChatId() === targetChatId;
+    };
 
     try {
         await waitUntilCondition(() => !isChatSaving, DEFAULT_SAVE_EDIT_TIMEOUT, 100);
@@ -9486,14 +9494,7 @@ export async function saveChatConditional() {
         return false;
     }
 
-    const currentAvatar = !selected_group && this_chid !== undefined ? characters[this_chid]?.avatar : undefined;
-    if (
-        chat !== targetChatRef
-        || selected_group !== targetGroup
-        || this_chid !== targetChid
-        || currentAvatar !== targetAvatar
-        || getCurrentChatId() !== targetChatId
-    ) {
+    if (!isSameSaveTarget()) {
         console.warn('Active chat changed while waiting for chat save lock; aborting stale saveChatConditional');
         return false;
     }
@@ -9511,9 +9512,11 @@ export async function saveChatConditional() {
             return false;
         }
 
-        // Save token and prompts cache to IndexedDB storage
-        saveTokenCache();
-        saveItemizedPrompts(getCurrentChatId());
+        // Save token and prompts cache to IndexedDB storage only if the same chat remains active
+        if (isSameSaveTarget()) {
+            saveTokenCache();
+            saveItemizedPrompts(targetChatId);
+        }
         return true;
     } catch (error) {
         console.error('Error saving chat', error);
