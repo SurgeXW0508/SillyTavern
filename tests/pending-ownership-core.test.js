@@ -181,12 +181,16 @@ async function createBranchAndGroupVmHarness() {
     const scriptPath = fileURLToPath(new URL('../public/script.js', import.meta.url));
     const groupChatsPath = fileURLToPath(new URL('../public/scripts/group-chats.js', import.meta.url));
     const bookmarksPath = fileURLToPath(new URL('../public/scripts/bookmarks.js', import.meta.url));
+    const utilsPath = fileURLToPath(new URL('../public/scripts/utils.js', import.meta.url));
+    const { debounce_timeout: realDebounceTimeout } = await import('../public/scripts/constants.js');
     const scriptSource = fs.readFileSync(scriptPath, 'utf8');
     const groupChatsSource = fs.readFileSync(groupChatsPath, 'utf8');
     const bookmarksSource = fs.readFileSync(bookmarksPath, 'utf8');
+    const utilsSource = fs.readFileSync(utilsPath, 'utf8');
 
     const saveChatCode = extractJsFunction(scriptSource, 'export async function saveChat(');
     const withChatSaveLockCode = extractJsFunction(scriptSource, 'export async function withChatSaveLock(');
+    const saveChatConditionalCode = extractJsFunction(scriptSource, 'export async function saveChatConditional(');
     const selectCharacterByIdCode = extractJsFunction(scriptSource, 'export async function selectCharacterById(');
     const postGroupChatSaveCode = extractJsFunction(groupChatsSource, 'async function postGroupChatSave(');
     const sendBoundGroupChatSaveCode = extractJsFunction(groupChatsSource, 'async function sendBoundGroupChatSave(');
@@ -194,12 +198,19 @@ async function createBranchAndGroupVmHarness() {
     const saveGroupBookmarkChatCode = extractJsFunction(groupChatsSource, 'export async function saveGroupBookmarkChat(');
     const captureOriginCode = extractJsFunction(bookmarksSource, 'function captureBookmarkOriginContext(');
     const getExistingChatNamesCode = extractJsFunction(bookmarksSource, 'async function getExistingChatNames(');
+    const getBookmarkNameCode = extractJsFunction(bookmarksSource, 'async function getBookmarkName(');
     const getBranchChatSnapshotCode = extractJsFunction(bookmarksSource, 'function getBranchChatSnapshot(');
     const createBranchCode = extractJsFunction(bookmarksSource, 'export async function createBranch(');
+    const createNewBookmarkCode = extractJsFunction(bookmarksSource, 'export async function createNewBookmark(');
+    const updateBookmarkDisplayCode = extractJsFunction(bookmarksSource, 'export function updateBookmarkDisplay(');
     const branchChatCode = extractJsFunction(bookmarksSource, 'export async function branchChat(');
+    const waitUntilConditionCode = extractJsFunction(utilsSource, 'export async function waitUntilCondition(');
 
     const aliceOriginalMessage = { mes: 'Alice branch floor 0', extra: {} };
     const state = {
+        realDebounceTimeout,
+        defaultSaveEditTimeout: realDebounceTimeout.relaxed,
+        debounce_timeout: { ...realDebounceTimeout },
         aliceOriginalMessage,
         chat: [aliceOriginalMessage],
         selected_group: null,
@@ -217,15 +228,22 @@ async function createBranchAndGroupVmHarness() {
         isChatSaving: false,
         is_group_generating: false,
         is_send_press: false,
+        saveMode: 'conflict',
         requests: [],
         openedCharacterChats: [],
         openedGroupChats: [],
         editedGroups: [],
         itemizedSaved: [],
+        tokenCacheSaved: 0,
+        domBookmarkUpdates: [],
         infoToasts: [],
+        warningToasts: [],
+        errorToasts: [],
+        successToasts: [],
         lockObservedDuringInitialFetch: false,
         chidAfterBlockedUiSwitch: null,
         onInitialConflictSave: null,
+        checkpointPopupResult: undefined,
         popupResult: 'OVERWRITE',
     };
 
@@ -239,10 +257,17 @@ async function createBranchAndGroupVmHarness() {
         Boolean,
         Number,
         String,
+        RegExp,
         Math,
         JSON,
+        Promise,
+        setTimeout,
+        clearTimeout,
+        setInterval,
+        clearInterval,
         structuredClone,
-        DEFAULT_SAVE_EDIT_TIMEOUT: 1000,
+        get DEFAULT_SAVE_EDIT_TIMEOUT() { return state.defaultSaveEditTimeout; },
+        get debounce_timeout() { return state.debounce_timeout; },
         get chat() { return state.chat; },
         get selected_group() { return state.selected_group; },
         set selected_group(v) { state.selected_group = v; },
@@ -257,6 +282,9 @@ async function createBranchAndGroupVmHarness() {
         set isChatSaving(v) { state.isChatSaving = v; },
         get is_group_generating() { return state.is_group_generating; },
         get is_send_press() { return state.is_send_press; },
+        getCurrentChatId: () => state.selected_group
+            ? (state.groups.find(g => g.id === state.selected_group)?.chat_id ?? '')
+            : (state.characters[state.this_chid]?.chat ?? ''),
         getCurrentChatDetails: () => ({
             sessionName: state.selected_group
                 ? (state.groups.find(g => g.id === state.selected_group)?.chat_id ?? '')
@@ -273,12 +301,34 @@ async function createBranchAndGroupVmHarness() {
         },
         uuidv4: () => 'branch-uuid-1',
         syncSwipeToMes: () => true,
+        renderTemplateAsync: async () => '<div>checkpoint</div>',
         getRequestHeaders: () => ({ 'Content-Type': 'application/json' }),
         compressRequest: async (req) => req,
-        waitUntilCondition: async (cond) => {
-            if (!cond()) {
-                throw new Error('Timed out');
-            }
+        cancelDebouncedChatSave: () => {},
+        saveTokenCache: () => { state.tokenCacheSaved += 1; },
+        $: (selector) => {
+            const attrs = new Map();
+            const flagAttrs = new Map();
+            return {
+                attr(key, val) {
+                    if (val === undefined) {
+                        return attrs.get(key);
+                    }
+                    attrs.set(key, val);
+                    state.domBookmarkUpdates.push({ selector, key, val });
+                    return this;
+                },
+                find() {
+                    return {
+                        attr(k, v) {
+                            flagAttrs.set(k, v);
+                        },
+                        data() {
+                            return 'Open checkpoint';
+                        },
+                    };
+                },
+            };
         },
         fetch: async (url, init) => {
             const body = JSON.parse(init.body);
@@ -288,6 +338,17 @@ async function createBranchAndGroupVmHarness() {
                     ok: true,
                     status: 200,
                     json: async () => ({ 0: { file_name: 'Alice - Main.jsonl' } }),
+                };
+            }
+            if (state.saveMode === 'ok') {
+                return { ok: true, status: 200, json: async () => ({ result: 'ok' }) };
+            }
+            if (state.saveMode === 'http500') {
+                return {
+                    ok: false,
+                    status: 500,
+                    statusText: 'Internal Server Error',
+                    json: async () => ({ error: 'disk full' }),
                 };
             }
             if (!body.force) {
@@ -303,12 +364,21 @@ async function createBranchAndGroupVmHarness() {
             }
             return { ok: true, status: 200, json: async () => ({ result: 'ok' }) };
         },
-        Popup: { show: { input: async () => state.popupResult } },
+        Popup: {
+            show: {
+                input: async (title, _body, defaultValue) => {
+                    if (title === 'Create Checkpoint') {
+                        return state.checkpointPopupResult !== undefined ? state.checkpointPopupResult : defaultValue;
+                    }
+                    return state.popupResult;
+                },
+            },
+        },
         toastr: {
-            error: () => {},
-            warning: () => {},
+            error: (msg, title) => { state.errorToasts.push({ msg, title }); },
+            warning: (msg, title) => { state.warningToasts.push({ msg, title }); },
             info: (msg) => { state.infoToasts.push(msg); },
-            success: () => {},
+            success: (msg, title) => { state.successToasts.push({ msg, title }); },
         },
         t: (strings) => Array.isArray(strings) ? strings.join('') : String(strings),
         window: { location: { reload: () => {} } },
@@ -328,9 +398,12 @@ async function createBranchAndGroupVmHarness() {
 
     vmModule.runInContext(
         [
+            'const bookmarkNameToken = "Checkpoint #";',
             'let selected_button = ""; let this_edit_mes_id;',
+            waitUntilConditionCode,
             saveChatCode,
             withChatSaveLockCode,
+            saveChatConditionalCode,
             selectCharacterByIdCode,
             postGroupChatSaveCode,
             sendBoundGroupChatSaveCode,
@@ -338,10 +411,13 @@ async function createBranchAndGroupVmHarness() {
             saveGroupBookmarkChatCode,
             captureOriginCode,
             getExistingChatNamesCode,
+            getBookmarkNameCode,
             getBranchChatSnapshotCode,
             createBranchCode,
+            createNewBookmarkCode,
+            updateBookmarkDisplayCode,
             branchChatCode,
-            'globalThis.fns = { branchChat, createBranch, selectCharacterById, saveGroupChat, saveGroupBookmarkChat };',
+            'globalThis.fns = { branchChat, createBranch, createNewBookmark, saveChatConditional, selectCharacterById, saveGroupChat, saveGroupBookmarkChat };',
         ].join('\n'),
         context,
     );
@@ -1050,6 +1126,165 @@ describe('Pending Ownership Core Fixes (WP-2)', () => {
         expect(state.requests[1].body.id).toBe('group-chat-a - Branch #1');
         expect(state.requests[1].body.chat[1]).toEqual({ mes: 'Group branch floor 0' });
         expect(state.groups[0].chats).toEqual(['group-chat-a', 'group-chat-a - Branch #1']);
+    });
+
+    test('createBranch and createNewBookmark wait up to extended timeout, warn on lock exhaustion, skip orphan prompts on failed save, and keep bound checkpoint targets across switches', async () => {
+        const { state, fns } = await createBranchAndGroupVmHarness();
+        const { createBranch, createNewBookmark, saveChatConditional } = fns;
+
+        expect(state.realDebounceTimeout.relaxed).toBe(1000);
+        expect(state.realDebounceTimeout.extended).toBe(5000);
+
+        // 1. Lock held longer than DEFAULT_SAVE_EDIT_TIMEOUT (50ms) but shorter than debounce_timeout.extended (300ms):
+        //    Auto-save saveChatConditional() times out at 50ms, whereas user-initiated createBranch() waits out the 110ms
+        //    in-flight save and still writes against the originally bound Alice target even after active session drifts to Bob.
+        state.saveMode = 'ok';
+        state.defaultSaveEditTimeout = 50;
+        state.debounce_timeout = { ...state.realDebounceTimeout, extended: 300 };
+        state.isChatSaving = true;
+        const slowSaveReleaseTimer = setTimeout(() => {
+            state.this_chid = 1;
+            state.name2 = 'Bob';
+            state.chat = [{ mes: 'Bob floor during slow auto-save', extra: {} }];
+            state.chat_metadata = { integrity: 'bob-meta-slow' };
+            state.isChatSaving = false;
+        }, 110);
+
+        const [autoSaveOutcome, delayedBranchName] = await Promise.all([
+            saveChatConditional(),
+            createBranch(0),
+        ]);
+        clearTimeout(slowSaveReleaseTimer);
+
+        expect(autoSaveOutcome).toBe(false);
+        expect(delayedBranchName).toBe('Alice - Main - Branch #1');
+        expect(state.warningToasts).toHaveLength(0);
+        const delayedBranchSaves = state.requests.filter(r => r.url === '/api/chats/save');
+        expect(delayedBranchSaves).toHaveLength(1);
+        expect(delayedBranchSaves[0].body.avatar_url).toBe('Alice.png');
+        expect(delayedBranchSaves[0].body.ch_name).toBe('Alice');
+        expect(delayedBranchSaves[0].body.file_name).toBe('Alice - Main - Branch #1');
+        expect(delayedBranchSaves[0].body.chat.slice(1)).toEqual([{ mes: 'Alice branch floor 0', extra: {} }]);
+        expect(state.isChatSaving).toBe(false);
+
+        // 2. Lock held past debounce_timeout.extended (e.g. unresolved OVERWRITE dialog holding isChatSaving):
+        //    Both createBranch and createNewBookmark abort without sending HTTP saves, surface warning toasts,
+        //    write zero orphan itemized prompts, and leave the active holder's isChatSaving = true untouched.
+        state.requests = [];
+        state.warningToasts = [];
+        state.itemizedSaved = [];
+        state.this_chid = 0;
+        state.name2 = 'Alice';
+        const lockedFloor = { mes: 'Alice locked floor', extra: {} };
+        state.chat = [lockedFloor];
+        state.chat_metadata = { integrity: 'alice-locked-meta' };
+        state.debounce_timeout = { ...state.realDebounceTimeout, extended: 70 };
+        state.isChatSaving = true;
+
+        const timedOutBranch = await createBranch(0);
+        expect(timedOutBranch).toBeUndefined();
+        expect(state.isChatSaving).toBe(true);
+        expect(state.warningToasts).toEqual([
+            { msg: 'Please wait until the chat is saved before creating a branch.', title: 'Branch creation failed' },
+        ]);
+        expect(lockedFloor.extra).toEqual({});
+
+        state.warningToasts = [];
+        const timedOutCheckpoint = await createNewBookmark(0, { forceName: 'Locked CP' });
+        expect(timedOutCheckpoint).toBeNull();
+        expect(state.isChatSaving).toBe(true);
+        expect(state.warningToasts).toEqual([
+            { msg: 'Please wait until the chat is saved before creating a checkpoint.', title: 'Create Checkpoint' },
+        ]);
+        expect(state.requests.filter(r => r.url === '/api/chats/save')).toHaveLength(0);
+        expect(state.itemizedSaved).toEqual([]);
+        expect(lockedFloor.extra.bookmark_link).toBeUndefined();
+
+        // 3. Failed checkpoint save (HTTP 500): must NOT leave orphan saveItemizedPrompts or bookmark_link.
+        state.isChatSaving = false;
+        state.debounce_timeout = { ...state.realDebounceTimeout };
+        state.requests = [];
+        state.warningToasts = [];
+        state.itemizedSaved = [];
+        state.saveMode = 'http500';
+        const failedCpFloor = { mes: 'Alice checkpoint floor before 500', extra: null };
+        state.chat = [failedCpFloor];
+
+        const failedCheckpoint = await createNewBookmark(0, { forceName: 'Failed CP' });
+        expect(failedCheckpoint).toBeNull();
+        expect(state.requests.filter(r => r.url === '/api/chats/save')).toHaveLength(1);
+        expect(state.itemizedSaved).toEqual([]);
+        expect(failedCpFloor.extra).toBeNull();
+        expect(state.domBookmarkUpdates).toEqual([]);
+
+        // 4. Checkpoint mid-flight switch A -> B + OVERWRITE confirmation:
+        //    Writes Alice's snapshot into Alice.png across OVERWRITE, sets bookmark_link on Alice's floor only,
+        //    and skips DOM mutation / itemizedPrompts / saveChatConditional on Bob's active session.
+        state.requests = [];
+        state.itemizedSaved = [];
+        state.domBookmarkUpdates = [];
+        state.saveMode = 'conflict';
+        state.popupResult = 'OVERWRITE';
+        const aliceCpFloor = { mes: 'Alice checkpoint floor 0', extra: {} };
+        const bobActiveFloor = { mes: 'Bob untouched floor 0', extra: {} };
+        state.this_chid = 0;
+        state.name2 = 'Alice';
+        state.chat = [aliceCpFloor];
+        state.chat_metadata = { integrity: 'alice-cp-meta', tag: 'alice-only' };
+        state.onInitialConflictSave = async () => {
+            state.this_chid = 1;
+            state.name2 = 'Bob';
+            state.chat = [bobActiveFloor];
+            state.chat_metadata = { integrity: 'bob-cp-meta', tag: 'bob-only' };
+        };
+
+        const switchedCheckpointName = await createNewBookmark(0);
+        expect(switchedCheckpointName).toBe('Alice - Main - Checkpoint #1');
+        const cpConflictSaves = state.requests.filter(r => r.url === '/api/chats/save');
+        expect(cpConflictSaves).toHaveLength(2);
+        expect(cpConflictSaves[0].body.force).toBe(false);
+        expect(cpConflictSaves[1].body.force).toBe(true);
+        for (const call of cpConflictSaves) {
+            expect(call.lockHeldDuringFetch).toBe(true);
+            expect(call.body.avatar_url).toBe('Alice.png');
+            expect(call.body.ch_name).toBe('Alice');
+            expect(call.body.file_name).toBe('Alice - Main - Checkpoint #1');
+            expect(call.body.chat[0].chat_metadata).toEqual({
+                integrity: 'branch-uuid-1',
+                tag: 'alice-only',
+                main_chat: 'Alice - Main',
+            });
+            expect(call.body.chat.slice(1)).toEqual([{ mes: 'Alice checkpoint floor 0', extra: {} }]);
+        }
+        expect(aliceCpFloor.extra.bookmark_link).toBe('Alice - Main - Checkpoint #1');
+        expect(bobActiveFloor.extra).toEqual({});
+        expect(state.domBookmarkUpdates).toEqual([]);
+        expect(state.itemizedSaved).toEqual([]);
+        expect(state.isChatSaving).toBe(false);
+
+        // 5. Checkpoint happy path when origin session stays active:
+        //    Updates DOM flag, saves itemized prompts for both checkpoint and parent chat, and saves parent chat.
+        state.requests = [];
+        state.itemizedSaved = [];
+        state.domBookmarkUpdates = [];
+        state.onInitialConflictSave = null;
+        state.saveMode = 'ok';
+        const aliceActiveCpFloor = { mes: 'Alice active checkpoint floor', extra: {} };
+        state.this_chid = 0;
+        state.name2 = 'Alice';
+        state.chat = [aliceActiveCpFloor];
+        state.chat_metadata = { integrity: 'alice-active-meta' };
+
+        const activeCheckpointName = await createNewBookmark(0, { forceName: 'Alice - Manual CP' });
+        expect(activeCheckpointName).toBe('Alice - Manual CP');
+        const activeCpSaves = state.requests.filter(r => r.url === '/api/chats/save');
+        expect(activeCpSaves).toHaveLength(2);
+        expect(activeCpSaves[0].body.file_name).toBe('Alice - Manual CP');
+        expect(activeCpSaves[1].body.file_name).toBe('Alice - Main');
+        expect(state.domBookmarkUpdates).toEqual([
+            { selector: '.mes[mesid="0"]', key: 'bookmark_link', val: 'Alice - Manual CP' },
+        ]);
+        expect(state.itemizedSaved).toEqual(['Alice - Manual CP', 'Alice - Main']);
     });
 
     test('world-info.js dry-run guards suppress global scan events and preserve externalActivations', () => {

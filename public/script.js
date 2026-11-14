@@ -9498,16 +9498,16 @@ export async function saveMetadata() {
  * @returns {Promise<{ acquired: boolean, value: T | undefined }>}
  */
 export async function withChatSaveLock(callback, timeout = DEFAULT_SAVE_EDIT_TIMEOUT) {
-    const deadline = Date.now() + timeout;
+    const deadline = Date.now() + Math.max(0, Number(timeout) || 0);
     while (isChatSaving) {
-        const remaining = Math.max(1, deadline - Date.now());
-        try {
-            await waitUntilCondition(() => !isChatSaving, remaining, 100);
-        } catch {
+        const remaining = deadline - Date.now();
+        if (remaining <= 0) {
             console.warn('Timeout waiting for chat to save');
             return { acquired: false, value: undefined };
         }
-        if (isChatSaving && Date.now() >= deadline) {
+        try {
+            await waitUntilCondition(() => !isChatSaving, remaining, Math.max(1, Math.min(50, remaining)));
+        } catch {
             console.warn('Timeout waiting for chat to save');
             return { acquired: false, value: undefined };
         }

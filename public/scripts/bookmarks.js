@@ -37,6 +37,7 @@ import { SlashCommandParser } from './slash-commands/SlashCommandParser.js';
 import { createTagMapFromList } from './tags.js';
 import { renderTemplateAsync } from './templates.js';
 import { compressRequest } from './request-compression.js';
+import { debounce_timeout } from './constants.js';
 import { t } from './i18n.js';
 
 import {
@@ -295,19 +296,24 @@ export async function createBranch(mesId, { swipeId = null } = {}) {
             });
 
         return saved ? branchName : null;
-    });
+    }, debounce_timeout.extended);
 
-    const name = lockResult.acquired ? lockResult.value : null;
+    if (!lockResult.acquired) {
+        toastr.warning(t`Please wait until the chat is saved before creating a branch.`, t`Branch creation failed`);
+        return;
+    }
+
+    const name = lockResult.value;
     if (!name) {
         return;
     }
 
     // append to branches list if it exists
     // otherwise create it
-    if (typeof lastMes.extra !== 'object') {
+    if (typeof lastMes.extra !== 'object' || lastMes.extra === null) {
         lastMes.extra = {};
     }
-    if (typeof lastMes.extra.branches !== 'object') {
+    if (!Array.isArray(lastMes.extra.branches)) {
         lastMes.extra.branches = [];
     }
     lastMes.extra.branches.push(name);
@@ -337,14 +343,14 @@ export async function createNewBookmark(mesId, { forceName = null } = {}) {
     }
 
     const originContext = captureBookmarkOriginContext();
-    const lastMes = chat[mesId];
-    const checkpointSnapshot = structuredClone(chat.slice(0, Number(mesId) + 1));
-
-    if (typeof lastMes.extra !== 'object') {
-        lastMes.extra = {};
+    if (!originContext.groupId && !originContext.character) {
+        toastr.info('No character selected.', 'Create Checkpoint');
+        return null;
     }
 
-    const isReplace = lastMes.extra.bookmark_link;
+    const lastMes = chat[mesId];
+    const checkpointSnapshot = structuredClone(chat.slice(0, Number(mesId) + 1));
+    const isReplace = Boolean(lastMes.extra?.bookmark_link);
 
     let name = await getBookmarkName({ isReplace: isReplace, forceName: forceName, originContext });
     if (!name) {
@@ -354,9 +360,6 @@ export async function createNewBookmark(mesId, { forceName = null } = {}) {
     const mainChat = originContext.sessionName;
     // Mint a fresh integrity slug so the checkpoint is distinguishable from its parent (#5942)
     const newMetadata = { main_chat: mainChat, integrity: uuidv4() };
-    if (originContext.isStillActive()) {
-        await saveItemizedPrompts(name);
-    }
 
     const lockResult = await withChatSaveLock(async () => {
         return originContext.groupId
@@ -369,18 +372,29 @@ export async function createNewBookmark(mesId, { forceName = null } = {}) {
                 targetCharacter: originContext.character,
                 baseMetadata: originContext.baseMetadata,
             });
-    });
+    }, debounce_timeout.extended);
 
-    if (!lockResult.acquired || !lockResult.value) {
+    if (!lockResult.acquired) {
+        toastr.warning(t`Please wait until the chat is saved before creating a checkpoint.`, t`Create Checkpoint`);
         return null;
     }
 
+    if (!lockResult.value) {
+        return null;
+    }
+
+    if (typeof lastMes.extra !== 'object' || lastMes.extra === null) {
+        lastMes.extra = {};
+    }
     lastMes.extra.bookmark_link = name;
 
     if (originContext.isStillActive()) {
         const mes = $(`.mes[mesid="${mesId}"]`);
         updateBookmarkDisplay(mes, name);
-        await saveChatConditional();
+        await saveItemizedPrompts(name);
+        if (originContext.isStillActive()) {
+            await saveChatConditional();
+        }
     }
     toastr.success('Click the flag icon next to the message to open the checkpoint chat.', 'Create Checkpoint', { timeOut: 10000 });
     return name;
@@ -552,6 +566,9 @@ export async function branchChat(mesId, { swipeId = null } = {}) {
     }
 
     await saveItemizedPrompts(fileName);
+    if (!originContext.isStillActive()) {
+        return fileName;
+    }
 
     if (originContext.groupId) {
         await openGroupChat(originContext.groupId, fileName);
