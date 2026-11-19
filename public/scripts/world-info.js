@@ -160,6 +160,7 @@ const KNOWN_DECORATORS = ['@@activate', '@@dont_activate'];
  * @property {Array} anBefore - Array of entries before Author's Note
  * @property {Array} anAfter - Array of entries after Author's Note
  * @property {{[key: string]: string[]}} outletEntries - Array of entries to be added to an outlet
+ * @property {Set<any>} allActivatedEntries - All activated world info entries for this scan
  */
 
 /**
@@ -946,7 +947,7 @@ export const worldInfoCache = new StructuredCloneMap({ cloneOnGet: true, cloneOn
  * @param {number} maxContext - The maximum context size of the generation.
  * @param {boolean} isDryRun - If true, the function will not emit any events.
  * @param {WIGlobalScanData} globalScanData Chat independent context to be scanned
- * @returns {Promise<WIPromptResult>} The world info string and depth.
+ * @returns {Promise<WIPromptResult>} The world info prompt slots and activated entries.
  */
 export async function getWorldInfoPrompt(chat, maxContext, isDryRun, globalScanData) {
     let worldInfoString = '', worldInfoBefore = '', worldInfoAfter = '';
@@ -970,6 +971,7 @@ export async function getWorldInfoPrompt(chat, maxContext, isDryRun, globalScanD
         anBefore: activatedWorldInfo.ANBeforeEntries ?? [],
         anAfter: activatedWorldInfo.ANAfterEntries ?? [],
         outletEntries: activatedWorldInfo.outletEntries ?? {},
+        allActivatedEntries: activatedWorldInfo.allActivatedEntries ?? new Set(),
     };
 }
 

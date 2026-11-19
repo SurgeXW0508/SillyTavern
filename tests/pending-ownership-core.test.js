@@ -1296,5 +1296,178 @@ describe('Pending Ownership Core Fixes (WP-2)', () => {
         expect(wiSource).toContain('const sortedEntries = await getSortedEntries({ isDryRun });');
         expect(wiSource).toMatch(/if\s*\(!isDryRun\)\s*\{\s*await eventSource\.emit\(event_types\.WORLDINFO_SCAN_DONE/);
         expect(wiSource).toMatch(/if\s*\(!isDryRun\)\s*\{\s*buffer\.resetExternalEffects\(\);\s*\}/);
+        expect(wiSource).toContain('allActivatedEntries: activatedWorldInfo.allActivatedEntries ?? new Set(),');
+    });
+
+    test('getWorldInfoPrompt dry-run emits zero events and returns an isolated allActivatedEntries Set with macro-expanded non-overflowed entries', async () => {
+        const wiPath = fileURLToPath(new URL('../public/scripts/world-info.js', import.meta.url));
+        const wiSource = fs.readFileSync(wiPath, 'utf8');
+        const getWorldInfoPromptCode = extractJsFunction(wiSource, 'export async function getWorldInfoPrompt(');
+        const getSortedEntriesCode = extractJsFunction(wiSource, 'export async function getSortedEntries(');
+        const checkWorldInfoCode = extractJsFunction(wiSource, 'export async function checkWorldInfo(');
+
+        const state = {
+            emitted: [],
+            resetExternalCalls: 0,
+            globalLore: [],
+        };
+
+        const vmModule = await import('node:vm');
+        const context = vmModule.createContext({
+            console: { debug: () => {}, log: () => {}, warn: () => {}, error: () => {} },
+            Array,
+            Object,
+            Set,
+            Map,
+            Math,
+            Number,
+            Boolean,
+            String,
+            JSON,
+            Promise,
+            structuredClone,
+            getContext: () => ({ extensionPrompts: {}, tagMap: {} }),
+            getExtensionPromptByName: async () => '',
+            WorldInfoBuffer: class {
+                constructor(chat) {
+                    this.chatText = chat.join('\n');
+                }
+                addInject() {}
+                addRecurse(text) {
+                    this.chatText += `\n${text}`;
+                }
+                hasRecurse() { return false; }
+                getDepth() { return 1; }
+                advanceScan() {}
+                getExternallyActivated() { return null; }
+                get() { return this.chatText; }
+                matchKeys(haystack, key) {
+                    return haystack.toLowerCase().includes(key.toLowerCase());
+                }
+                resetExternalEffects() {
+                    state.resetExternalCalls += 1;
+                }
+            },
+            WorldInfoTimedEffects: class {
+                checkTimedEffects() {}
+                isEffectActive() { return false; }
+                setTimedEffects() {}
+                cleanUp() {}
+            },
+            defaultGlobalScanData: { trigger: 'normal' },
+            scan_state: { NONE: 0, INITIAL: 1, RECURSION: 2, MIN_ACTIVATIONS: 3 },
+            world_info_position: { before: 0, after: 1, ANTop: 2, ANBottom: 3, atDepth: 4, EMTop: 5, EMBottom: 6, outlet: 7 },
+            world_info_insertion_strategy: { evenly: 0, character_first: 1, global_first: 2 },
+            world_info_logic: { AND_ANY: 0, NOT_ALL: 1, NOT_ANY: 2, AND_ALL: 3 },
+            wi_anchor_position: { before: 0, after: 1 },
+            extension_prompt_roles: { SYSTEM: 0, USER: 1, ASSISTANT: 2 },
+            regex_placement: { WORLD_INFO: 5 },
+            DEFAULT_DEPTH: 4,
+            NOTE_MODULE_NAME: '2_floating_prompt',
+            chat_metadata: {},
+            metadata_keys: { position: 'note_position', depth: 'note_depth', role: 'note_role' },
+            extension_settings: { note: { allowWIScan: false } },
+            shouldWIAddPrompt: false,
+            world_info_budget: 25,
+            world_info_budget_cap: 0,
+            world_info_max_recursion_steps: 0,
+            world_info_overflow_alert: false,
+            world_info_recursive: false,
+            world_info_min_activations: 0,
+            world_info_min_activations_depth_max: 0,
+            world_info_character_strategy: 0,
+            event_types: {
+                WORLDINFO_ENTRIES_LOADED: 'worldinfo_entries_loaded',
+                WORLDINFO_SCAN_DONE: 'worldinfo_scan_done',
+                WORLD_INFO_ACTIVATED: 'world_info_activated',
+            },
+            eventSource: {
+                emit: async (event, payload) => {
+                    state.emitted.push({ event, payload });
+                },
+            },
+            toastr: { warning: () => {} },
+            sortFn: (a, b) => (b.order ?? 100) - (a.order ?? 100),
+            filterByInclusionGroups: () => {},
+            getTokenCountAsync: async (text) => String(text ?? '').trim().length,
+            substituteParams: (text) => String(text ?? '').replace(/\{\{user\}\}/g, 'Hero'),
+            getRegexedString: (text) => text,
+            getGlobalLore: async () => state.globalLore,
+            getCharacterLore: async () => [],
+            getChatLore: async () => [],
+            getPersonaLore: async () => [],
+            parseDecorators: (content) => {
+                if (content.startsWith('@@activate\n')) {
+                    return [['@@activate'], content.slice('@@activate\n'.length)];
+                }
+                return [[], content];
+            },
+            getStringHash: (str) => str.length,
+        });
+
+        vmModule.runInContext(
+            `${getSortedEntriesCode}\n${checkWorldInfoCode}\n${getWorldInfoPromptCode}\nglobalThis.getWorldInfoPrompt = getWorldInfoPrompt;`,
+            context,
+        );
+
+        state.globalLore = [
+            {
+                world: 'LoreBook',
+                uid: 1,
+                key: ['dragon'],
+                content: '@@activate\nHello {{user}}',
+                position: 0,
+                order: 20,
+                constant: false,
+                ignoreBudget: false,
+            },
+            {
+                world: 'LoreBook',
+                uid: 2,
+                key: ['dragon'],
+                content: 'OVERFLOW_ENTRY_CONTENT_EXCEEDING_TOKEN_BUDGET_LIMIT_1234567890',
+                position: 0,
+                order: 10,
+                constant: false,
+                ignoreBudget: false,
+            },
+        ];
+
+        // maxContext=100, world_info_budget=25% => budget=25 chars; uid=1 ('Hello Hero', 10 chars) fits, uid=2 overflows
+        const dry1 = await context.getWorldInfoPrompt(['User: dragon'], 100, true, { trigger: 'normal' });
+        expect(state.emitted).toEqual([]);
+        expect(state.resetExternalCalls).toBe(0);
+        expect(dry1.allActivatedEntries).toBeInstanceOf(Set);
+        const dry1Entries = [...dry1.allActivatedEntries];
+        expect(dry1Entries).toHaveLength(1);
+        expect(dry1Entries[0].uid).toBe(1);
+        expect(dry1Entries[0].content).toBe('Hello Hero');
+        expect(dry1.worldInfoBefore).toBe('Hello Hero');
+
+        // Independent Set per call: mutating dry1 does not affect dry2
+        const dry2 = await context.getWorldInfoPrompt(['User: dragon'], 100, true, { trigger: 'normal' });
+        expect(dry2.allActivatedEntries).not.toBe(dry1.allActivatedEntries);
+        dry1.allActivatedEntries.clear();
+        expect(dry2.allActivatedEntries.size).toBe(1);
+        expect(state.emitted).toEqual([]);
+
+        // Non-dry-run preserves event emission, external effect reset, and still returns allActivatedEntries
+        const live = await context.getWorldInfoPrompt(['User: dragon'], 100, false, { trigger: 'normal' });
+        expect(state.emitted.map(item => item.event)).toEqual([
+            'worldinfo_entries_loaded',
+            'worldinfo_scan_done',
+            'world_info_activated',
+        ]);
+        expect(state.resetExternalCalls).toBe(1);
+        expect(live.allActivatedEntries).toBeInstanceOf(Set);
+        expect([...live.allActivatedEntries].map(e => e.uid)).toEqual([1]);
+
+        // Empty world info still returns an empty Set with zero events on dry-run
+        state.emitted = [];
+        state.globalLore = [];
+        const emptyDry = await context.getWorldInfoPrompt(['User: hi'], 100, true, { trigger: 'normal' });
+        expect(state.emitted).toEqual([]);
+        expect(emptyDry.allActivatedEntries).toBeInstanceOf(Set);
+        expect(emptyDry.allActivatedEntries.size).toBe(0);
     });
 });
