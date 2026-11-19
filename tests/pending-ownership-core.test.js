@@ -1462,12 +1462,248 @@ describe('Pending Ownership Core Fixes (WP-2)', () => {
         expect(live.allActivatedEntries).toBeInstanceOf(Set);
         expect([...live.allActivatedEntries].map(e => e.uid)).toEqual([1]);
 
-        // Empty world info still returns an empty Set with zero events on dry-run
+        // Empty world info still returns an empty Set and empty v1 promptEntrySources with zero events on dry-run
         state.emitted = [];
         state.globalLore = [];
         const emptyDry = await context.getWorldInfoPrompt(['User: hi'], 100, true, { trigger: 'normal' });
         expect(state.emitted).toEqual([]);
         expect(emptyDry.allActivatedEntries).toBeInstanceOf(Set);
         expect(emptyDry.allActivatedEntries.size).toBe(0);
+        expect(emptyDry.promptEntrySources).toEqual({
+            version: 1,
+            before: [],
+            after: [],
+            anBefore: [],
+            anAfter: [],
+            examples: [],
+            depth: [],
+            outlets: {},
+        });
+    });
+
+    test('getWorldInfoPrompt promptEntrySources covers all 7 slots with exact order, identity separation, regex-once macro semantics, and zero dry-run events', async () => {
+        const wiPath = fileURLToPath(new URL('../public/scripts/world-info.js', import.meta.url));
+        const wiSource = fs.readFileSync(wiPath, 'utf8');
+        const getWorldInfoPromptCode = extractJsFunction(wiSource, 'export async function getWorldInfoPrompt(');
+        const getSortedEntriesCode = extractJsFunction(wiSource, 'export async function getSortedEntries(');
+        const checkWorldInfoCode = extractJsFunction(wiSource, 'export async function checkWorldInfo(');
+
+        const state = {
+            emitted: [],
+            resetExternalCalls: 0,
+            globalLore: [],
+            regexCounterMacroCalls: 0,
+        };
+
+        const vmModule = await import('node:vm');
+        const context = vmModule.createContext({
+            console: { debug: () => {}, log: () => {}, warn: () => {}, error: () => {} },
+            Array,
+            Object,
+            Set,
+            Map,
+            Math,
+            Number,
+            Boolean,
+            String,
+            JSON,
+            Promise,
+            structuredClone,
+            getContext: () => ({ extensionPrompts: {}, tagMap: {} }),
+            getExtensionPromptByName: async () => '',
+            WorldInfoBuffer: class {
+                constructor(chat) {
+                    this.chatText = chat.join('\n');
+                }
+                addInject() {}
+                addRecurse(text) {
+                    this.chatText += `\n${text}`;
+                }
+                hasRecurse() { return false; }
+                getDepth() { return 1; }
+                advanceScan() {}
+                getExternallyActivated() { return null; }
+                get() { return this.chatText; }
+                matchKeys(haystack, key) {
+                    return haystack.toLowerCase().includes(key.toLowerCase());
+                }
+                resetExternalEffects() {
+                    state.resetExternalCalls += 1;
+                }
+            },
+            WorldInfoTimedEffects: class {
+                checkTimedEffects() {}
+                isEffectActive() { return false; }
+                setTimedEffects() {}
+                cleanUp() {}
+            },
+            defaultGlobalScanData: { trigger: 'normal' },
+            scan_state: { NONE: 0, INITIAL: 1, RECURSION: 2, MIN_ACTIVATIONS: 3 },
+            world_info_position: { before: 0, after: 1, ANTop: 2, ANBottom: 3, atDepth: 4, EMTop: 5, EMBottom: 6, outlet: 7 },
+            world_info_insertion_strategy: { evenly: 0, character_first: 1, global_first: 2 },
+            world_info_logic: { AND_ANY: 0, NOT_ALL: 1, NOT_ANY: 2, AND_ALL: 3 },
+            wi_anchor_position: { before: 0, after: 1 },
+            extension_prompt_roles: { SYSTEM: 0, USER: 1, ASSISTANT: 2 },
+            regex_placement: { WORLD_INFO: 5 },
+            DEFAULT_DEPTH: 4,
+            NOTE_MODULE_NAME: '2_floating_prompt',
+            chat_metadata: {},
+            metadata_keys: { position: 'note_position', depth: 'note_depth', role: 'note_role' },
+            extension_settings: { note: { allowWIScan: false } },
+            shouldWIAddPrompt: false,
+            world_info_budget: 100,
+            world_info_budget_cap: 0,
+            world_info_max_recursion_steps: 0,
+            world_info_overflow_alert: false,
+            world_info_recursive: false,
+            world_info_min_activations: 0,
+            world_info_min_activations_depth_max: 0,
+            world_info_character_strategy: 0,
+            event_types: {
+                WORLDINFO_ENTRIES_LOADED: 'worldinfo_entries_loaded',
+                WORLDINFO_SCAN_DONE: 'worldinfo_scan_done',
+                WORLD_INFO_ACTIVATED: 'world_info_activated',
+            },
+            eventSource: {
+                emit: async (event, payload) => {
+                    state.emitted.push({ event, payload });
+                },
+            },
+            toastr: { warning: () => {} },
+            sortFn: (a, b) => (b.order ?? 100) - (a.order ?? 100),
+            filterByInclusionGroups: () => {},
+            getTokenCountAsync: async () => 1,
+            substituteParams: (text) => String(text ?? ''),
+            getRegexedString: (text, _placement, opts = {}) => {
+                if (text === 'REGEX_TO_EMPTY') return '';
+                if (text === 'REGEX_WITH_COUNTER') {
+                    state.regexCounterMacroCalls += 1;
+                    return `COUNT_${state.regexCounterMacroCalls}`;
+                }
+                if (text === 'REWRITE_ME') {
+                    return `REWRITTEN(d=${opts.depth ?? 'null'})`;
+                }
+                return text;
+            },
+            getGlobalLore: async () => state.globalLore,
+            getCharacterLore: async () => [],
+            getChatLore: async () => [],
+            getPersonaLore: async () => [],
+            parseDecorators: (content) => [[], content],
+            getStringHash: (str) => str.length,
+        });
+
+        vmModule.runInContext(
+            `${getSortedEntriesCode}\n${checkWorldInfoCode}\n${getWorldInfoPromptCode}\nglobalThis.getWorldInfoPrompt = getWorldInfoPrompt;`,
+            context,
+        );
+
+        state.globalLore = [
+            // before: two books with same uid=7 & identical content + one rewritten + one regex-to-empty
+            { world: 'BookA', uid: 7, key: ['go'], content: 'DUP_TEXT', position: 0, order: 10, constant: true, ignoreBudget: true },
+            { world: 'BookB', uid: 7, key: ['go'], content: 'DUP_TEXT', position: 0, order: 30, constant: true, ignoreBudget: true },
+            { world: 'BookA', uid: 8, key: ['go'], content: 'REWRITE_ME', position: 0, order: 20, constant: true, ignoreBudget: true },
+            { world: 'BookA', uid: 9, key: ['go'], content: 'REGEX_TO_EMPTY', position: 0, order: 40, constant: true, ignoreBudget: true },
+            // after: includes counter macro in regex replacement
+            { world: 'BookA', uid: 10, key: ['go'], content: 'AFTER_FIRST', position: 1, order: 10, constant: true, ignoreBudget: true },
+            { world: 'BookB', uid: 11, key: ['go'], content: 'REGEX_WITH_COUNTER', position: 1, order: 20, constant: true, ignoreBudget: true },
+            // anBefore & anAfter
+            { world: 'BookA', uid: 12, key: ['go'], content: 'AN_TOP_1', position: 2, order: 10, constant: true, ignoreBudget: true },
+            { world: 'BookB', uid: 13, key: ['go'], content: 'AN_TOP_2', position: 2, order: 20, constant: true, ignoreBudget: true },
+            { world: 'BookA', uid: 14, key: ['go'], content: 'AN_BOT_1', position: 3, order: 10, constant: true, ignoreBudget: true },
+            // atDepth: two entries in same (depth=2, role=USER), one in (depth=4, role=SYSTEM), one with undefined depth
+            { world: 'BookA', uid: 15, key: ['go'], content: 'REWRITE_ME', position: 4, depth: 2, role: 1, order: 10, constant: true, ignoreBudget: true },
+            { world: 'BookB', uid: 16, key: ['go'], content: 'DEPTH2_USER_HI', position: 4, depth: 2, role: 1, order: 25, constant: true, ignoreBudget: true },
+            { world: 'BookA', uid: 17, key: ['go'], content: 'DEPTH_DEFAULT', position: 4, depth: undefined, role: undefined, order: 5, constant: true, ignoreBudget: true },
+            // examples: EMTop & EMBottom
+            { world: 'BookA', uid: 18, key: ['go'], content: 'EM_TOP', position: 5, order: 10, constant: true, ignoreBudget: true },
+            { world: 'BookB', uid: 19, key: ['go'], content: 'EM_BOT', position: 6, order: 20, constant: true, ignoreBudget: true },
+            // outlets: two entries in same outlet (.push order) + one missing outletName (skipped)
+            { world: 'BookA', uid: 20, key: ['go'], content: 'OUT_HI', position: 7, outletName: 'my_outlet', order: 50, constant: true, ignoreBudget: true },
+            { world: 'BookB', uid: 21, key: ['go'], content: 'OUT_LO', position: 7, outletName: 'my_outlet', order: 10, constant: true, ignoreBudget: true },
+            { world: 'BookA', uid: 22, key: ['go'], content: 'OUT_NO_NAME', position: 7, outletName: '', order: 30, constant: true, ignoreBudget: true },
+        ];
+
+        const res = await context.getWorldInfoPrompt(['User: go'], 10000, true, { trigger: 'normal' });
+
+        // Dry-run emits zero events and does not reset external effects
+        expect(state.emitted).toEqual([]);
+        expect(state.resetExternalCalls).toBe(0);
+
+        // Counter macro in regex replacement executes exactly once on one dry-run
+        expect(state.regexCounterMacroCalls).toBe(1);
+
+        const src = res.promptEntrySources;
+        expect(src.version).toBe(1);
+
+        // Invariant: every slot matches promptEntrySources verbatim
+        expect(src.before.map(e => e.content).join('\n')).toBe(res.worldInfoBefore);
+        expect(src.after.map(e => e.content).join('\n')).toBe(res.worldInfoAfter);
+        expect(src.anBefore.map(e => e.content)).toEqual(res.anBefore);
+        expect(src.anAfter.map(e => e.content)).toEqual(res.anAfter);
+        expect(src.examples.map(({ position, content }) => ({ position, content }))).toEqual(res.worldInfoExamples);
+        expect(src.depth).toHaveLength(res.worldInfoDepth.length);
+        for (let i = 0; i < res.worldInfoDepth.length; i += 1) {
+            expect(src.depth[i].depth).toBe(res.worldInfoDepth[i].depth ?? 4);
+            expect(src.depth[i].role).toBe(res.worldInfoDepth[i].role);
+            expect(src.depth[i].entries.map(e => e.content)).toEqual(res.worldInfoDepth[i].entries);
+        }
+        expect(Object.keys(src.outlets)).toEqual(Object.keys(res.outletEntries));
+        for (const [outletName, outletItems] of Object.entries(res.outletEntries)) {
+            expect(src.outlets[outletName].map(e => e.content)).toEqual(outletItems);
+        }
+
+        // Exact identity separation (same uid across two books, identical content, regex-to-empty skipped)
+        expect(src.before).toEqual([
+            { world: 'BookA', uid: 7, content: 'DUP_TEXT' },
+            { world: 'BookA', uid: 8, content: 'REWRITTEN(d=null)' },
+            { world: 'BookB', uid: 7, content: 'DUP_TEXT' },
+        ]);
+        expect(src.after).toEqual([
+            { world: 'BookA', uid: 10, content: 'AFTER_FIRST' },
+            { world: 'BookB', uid: 11, content: 'COUNT_1' },
+        ]);
+        expect(src.anBefore).toEqual([
+            { world: 'BookA', uid: 12, content: 'AN_TOP_1' },
+            { world: 'BookB', uid: 13, content: 'AN_TOP_2' },
+        ]);
+        expect(src.anAfter).toEqual([
+            { world: 'BookA', uid: 14, content: 'AN_BOT_1' },
+        ]);
+        expect(src.examples).toEqual([
+            { world: 'BookA', uid: 18, content: 'EM_TOP', position: 0 },
+            { world: 'BookB', uid: 19, content: 'EM_BOT', position: 1 },
+        ]);
+        expect(src.depth).toEqual([
+            {
+                depth: 2,
+                role: 1,
+                entries: [
+                    { world: 'BookA', uid: 15, content: 'REWRITTEN(d=2)' },
+                    { world: 'BookB', uid: 16, content: 'DEPTH2_USER_HI' },
+                ],
+            },
+            {
+                depth: 4,
+                role: 0,
+                entries: [
+                    { world: 'BookA', uid: 17, content: 'DEPTH_DEFAULT' },
+                ],
+            },
+        ]);
+        // Outlets preserve .push() order (descending order: 50 before 10)
+        expect(src.outlets).toEqual({
+            my_outlet: [
+                { world: 'BookA', uid: 20, content: 'OUT_HI' },
+                { world: 'BookB', uid: 21, content: 'OUT_LO' },
+            ],
+        });
+
+        // Pure data only: entry.content in allActivatedEntries is not mutated by regex, and source objects are plain records
+        const activatedList = [...res.allActivatedEntries];
+        const rewrittenEntry = activatedList.find(e => e.world === 'BookA' && e.uid === 8);
+        expect(rewrittenEntry.content).toBe('REWRITE_ME');
+        expect(Object.keys(src.before[0]).sort()).toEqual(['content', 'uid', 'world']);
+        expect(Object.keys(src.examples[0]).sort()).toEqual(['content', 'position', 'uid', 'world']);
     });
 });

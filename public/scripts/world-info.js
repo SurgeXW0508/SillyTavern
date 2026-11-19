@@ -151,6 +151,40 @@ const KNOWN_DECORATORS = ['@@activate', '@@dont_activate'];
  */
 
 /**
+ * @typedef {object} WIPromptEntrySource Pure-data source record for a prompt entry slot
+ * @property {string} world World book name
+ * @property {number|string} uid Entry UID
+ * @property {string} content Regex-processed content inserted into the slot
+ */
+
+/**
+ * @typedef {object} WIPromptExampleSource Pure-data source record for an example slot
+ * @property {string} world World book name
+ * @property {number|string} uid Entry UID
+ * @property {string} content Regex-processed content inserted into the slot
+ * @property {number} position Anchor position (wi_anchor_position)
+ */
+
+/**
+ * @typedef {object} WIPromptDepthSource Pure-data source group parallel to WIDepthEntries
+ * @property {number} depth Insertion depth
+ * @property {number} role Extension prompt role
+ * @property {WIPromptEntrySource[]} entries Entries inserted into this depth group
+ */
+
+/**
+ * @typedef {object} WIPromptEntrySources Parallel per-slot source metadata produced during prompt assembly
+ * @property {1} version Schema version
+ * @property {WIPromptEntrySource[]} before Parallel to WIBeforeEntries
+ * @property {WIPromptEntrySource[]} after Parallel to WIAfterEntries
+ * @property {WIPromptEntrySource[]} anBefore Parallel to ANTopEntries
+ * @property {WIPromptEntrySource[]} anAfter Parallel to ANBottomEntries
+ * @property {WIPromptExampleSource[]} examples Parallel to EMEntries
+ * @property {WIPromptDepthSource[]} depth Parallel to WIDepthEntries
+ * @property {{[key: string]: WIPromptEntrySource[]}} outlets Parallel to WIOutletEntries
+ */
+
+/**
  * @typedef {object} WIPromptResult
  * @property {string} worldInfoString - Complete world info string
  * @property {string} worldInfoBefore - World info that goes before the prompt
@@ -161,6 +195,7 @@ const KNOWN_DECORATORS = ['@@activate', '@@dont_activate'];
  * @property {Array} anAfter - Array of entries after Author's Note
  * @property {{[key: string]: string[]}} outletEntries - Array of entries to be added to an outlet
  * @property {Set<any>} allActivatedEntries - All activated world info entries for this scan
+ * @property {WIPromptEntrySources} promptEntrySources - Per-slot entry source records parallel to prompt slots
  */
 
 /**
@@ -173,6 +208,7 @@ const KNOWN_DECORATORS = ['@@activate', '@@dont_activate'];
  * @property {any[]} ANAfterEntries The entries after Author's Note.
  * @property {{[key: string]: string[]}} outletEntries - Array of entries to be added to an outlet
  * @property {Set<any>} allActivatedEntries All entries.
+ * @property {WIPromptEntrySources} promptEntrySources Per-slot entry source records parallel to prompt slots.
  */
 
 /**
@@ -972,6 +1008,16 @@ export async function getWorldInfoPrompt(chat, maxContext, isDryRun, globalScanD
         anAfter: activatedWorldInfo.ANAfterEntries ?? [],
         outletEntries: activatedWorldInfo.outletEntries ?? {},
         allActivatedEntries: activatedWorldInfo.allActivatedEntries ?? new Set(),
+        promptEntrySources: activatedWorldInfo.promptEntrySources ?? {
+            version: 1,
+            before: [],
+            after: [],
+            anBefore: [],
+            anAfter: [],
+            examples: [],
+            depth: [],
+            outlets: {},
+        },
     };
 }
 
@@ -4834,7 +4880,26 @@ export async function checkWorldInfo(chat, maxContext, isDryRun, globalScanData 
     timedEffects.checkTimedEffects();
 
     if (sortedEntries.length === 0) {
-        return { worldInfoBefore: '', worldInfoAfter: '', WIDepthEntries: [], EMEntries: [], ANBeforeEntries: [], ANAfterEntries: [], outletEntries: {}, allActivatedEntries: new Set() };
+        return {
+            worldInfoBefore: '',
+            worldInfoAfter: '',
+            WIDepthEntries: [],
+            EMEntries: [],
+            ANBeforeEntries: [],
+            ANAfterEntries: [],
+            outletEntries: {},
+            allActivatedEntries: new Set(),
+            promptEntrySources: {
+                version: 1,
+                before: [],
+                after: [],
+                anBefore: [],
+                anAfter: [],
+                examples: [],
+                depth: [],
+                outlets: {},
+            },
+        };
     }
 
     /** @type {number[]} Represents the delay levels for entries that are delayed until recursion */
@@ -5286,6 +5351,20 @@ export async function checkWorldInfo(chat, maxContext, isDryRun, globalScanData 
     const WIDepthEntries = [];
     /** @type {{[key: string]: string[]}} */
     const WIOutletEntries = {};
+    /** @type {WIPromptEntrySource[]} */
+    const WIBeforeSources = [];
+    /** @type {WIPromptEntrySource[]} */
+    const WIAfterSources = [];
+    /** @type {WIPromptExampleSource[]} */
+    const EMSources = [];
+    /** @type {WIPromptEntrySource[]} */
+    const ANTopSources = [];
+    /** @type {WIPromptEntrySource[]} */
+    const ANBottomSources = [];
+    /** @type {WIPromptDepthSource[]} */
+    const WIDepthSources = [];
+    /** @type {{[key: string]: WIPromptEntrySource[]}} */
+    const WIOutletSources = {};
 
     // Appends from insertion order 999 to 1. Use unshift for this purpose
     // TODO (kingbri): Change to use WI Anchor positioning instead of separate top/bottom arrays
@@ -5298,38 +5377,59 @@ export async function checkWorldInfo(chat, maxContext, isDryRun, globalScanData 
             return;
         }
 
+        const sourceWorld = typeof entry.world === 'string' ? entry.world : String(entry.world ?? '');
+        const sourceUid = (typeof entry.uid === 'number' || typeof entry.uid === 'string') ? entry.uid : String(entry.uid ?? '');
+
         switch (entry.position) {
             case world_info_position.before:
                 WIBeforeEntries.unshift(content);
+                WIBeforeSources.unshift({ world: sourceWorld, uid: sourceUid, content });
                 break;
             case world_info_position.after:
                 WIAfterEntries.unshift(content);
+                WIAfterSources.unshift({ world: sourceWorld, uid: sourceUid, content });
                 break;
             case world_info_position.EMTop:
                 EMEntries.unshift(
                     { position: wi_anchor_position.before, content: content },
+                );
+                EMSources.unshift(
+                    { world: sourceWorld, uid: sourceUid, content, position: wi_anchor_position.before },
                 );
                 break;
             case world_info_position.EMBottom:
                 EMEntries.unshift(
                     { position: wi_anchor_position.after, content: content },
                 );
+                EMSources.unshift(
+                    { world: sourceWorld, uid: sourceUid, content, position: wi_anchor_position.after },
+                );
                 break;
             case world_info_position.ANTop:
                 ANTopEntries.unshift(content);
+                ANTopSources.unshift({ world: sourceWorld, uid: sourceUid, content });
                 break;
             case world_info_position.ANBottom:
                 ANBottomEntries.unshift(content);
+                ANBottomSources.unshift({ world: sourceWorld, uid: sourceUid, content });
                 break;
             case world_info_position.atDepth: {
-                const existingDepthIndex = WIDepthEntries.findIndex((e) => e.depth === (entry.depth ?? DEFAULT_DEPTH) && e.role === (entry.role ?? extension_prompt_roles.SYSTEM));
+                const resolvedDepth = entry.depth ?? DEFAULT_DEPTH;
+                const resolvedRole = entry.role ?? extension_prompt_roles.SYSTEM;
+                const existingDepthIndex = WIDepthEntries.findIndex((e) => e.depth === resolvedDepth && e.role === resolvedRole);
                 if (existingDepthIndex !== -1) {
                     WIDepthEntries[existingDepthIndex].entries.unshift(content);
+                    WIDepthSources[existingDepthIndex].entries.unshift({ world: sourceWorld, uid: sourceUid, content });
                 } else {
                     WIDepthEntries.push({
                         depth: entry.depth,
                         entries: [content],
-                        role: entry.role ?? extension_prompt_roles.SYSTEM,
+                        role: resolvedRole,
+                    });
+                    WIDepthSources.push({
+                        depth: resolvedDepth,
+                        role: resolvedRole,
+                        entries: [{ world: sourceWorld, uid: sourceUid, content }],
                     });
                 }
                 break;
@@ -5341,8 +5441,10 @@ export async function checkWorldInfo(chat, maxContext, isDryRun, globalScanData 
                 }
                 if (Array.isArray(WIOutletEntries[entry.outletName])) {
                     WIOutletEntries[entry.outletName].push(content);
+                    WIOutletSources[entry.outletName].push({ world: sourceWorld, uid: sourceUid, content });
                 } else {
                     WIOutletEntries[entry.outletName] = [content];
+                    WIOutletSources[entry.outletName] = [{ world: sourceWorld, uid: sourceUid, content }];
                 }
                 break;
             }
@@ -5353,6 +5455,17 @@ export async function checkWorldInfo(chat, maxContext, isDryRun, globalScanData 
 
     const worldInfoBefore = WIBeforeEntries.length ? WIBeforeEntries.join('\n') : '';
     const worldInfoAfter = WIAfterEntries.length ? WIAfterEntries.join('\n') : '';
+    /** @type {WIPromptEntrySources} */
+    const promptEntrySources = {
+        version: 1,
+        before: WIBeforeSources,
+        after: WIAfterSources,
+        anBefore: ANTopSources,
+        anAfter: ANBottomSources,
+        examples: EMSources,
+        depth: WIDepthSources,
+        outlets: WIOutletSources,
+    };
 
     if (shouldWIAddPrompt) {
         const originalAN = context.extensionPrompts[NOTE_MODULE_NAME]?.value ?? '';
@@ -5369,7 +5482,7 @@ export async function checkWorldInfo(chat, maxContext, isDryRun, globalScanData 
     console.log(`[WI] ${isDryRun ? 'Hypothetically adding' : 'Adding'} ${allActivatedEntries.size} entries to prompt`, Array.from(allActivatedEntries.values()));
     console.debug(`[WI] --- DONE${isDryRun ? ' (DRY RUN)' : ''} ---`);
 
-    return { worldInfoBefore, worldInfoAfter, EMEntries, WIDepthEntries, ANBeforeEntries: ANTopEntries, ANAfterEntries: ANBottomEntries, outletEntries: WIOutletEntries, allActivatedEntries: new Set(allActivatedEntries.values()) };
+    return { worldInfoBefore, worldInfoAfter, EMEntries, WIDepthEntries, ANBeforeEntries: ANTopEntries, ANAfterEntries: ANBottomEntries, outletEntries: WIOutletEntries, allActivatedEntries: new Set(allActivatedEntries.values()), promptEntrySources };
 }
 
 /**
