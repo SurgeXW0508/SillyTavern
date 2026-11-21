@@ -1,8 +1,8 @@
 {
   "schema_version": 1,
-  "version": "1.19.0-personal.2",
-  "tag": "v1.19.0-personal.2",
-  "runtime_commit": "9817c0e6de8647f6519b5cc2fc583df3070c4053",
+  "version": "1.19.0-personal.3",
+  "tag": "v1.19.0-personal.3",
+  "runtime_commit": "6710d78edcaf5ef837992818fb3b8d5c60214ada",
   "official_upstream": {
     "repository": "SillyTavern/SillyTavern",
     "branch": "release",
@@ -27,14 +27,15 @@
     "version": "0.7.4"
   },
   "acceptance": {
-    "source": "automated_ci_and_3repo_chromium_verification_2026-11-14",
-    "candidate_runtime": "9817c0e6de8647f6519b5cc2fc583df3070c4053",
+    "source": "automated_ci_and_3repo_chromium_verification_2026-11-21",
+    "candidate_runtime": "6710d78edcaf5ef837992818fb3b8d5c60214ada",
     "passed": [
       "vertex_native_unit_and_http_42_of_42",
       "core_reliability_17_of_17",
       "jest_unit_24_suites_437_tests",
       "playwright_vertex_and_reasoning_e2e_22_of_22",
-      "triad_chromium_e2e_gemini4_hydrogen_carbon_replay_and_bridges"
+      "triad_chromium_e2e_gemini4_hydrogen_carbon_replay_and_bridges",
+      "worldinfo_prompt_activated_entries_and_entry_sources"
     ],
     "not_reported": [
       "live_google_gemini4_prefix_mismatch_drop",

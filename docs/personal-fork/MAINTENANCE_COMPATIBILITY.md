@@ -1,6 +1,6 @@
 # Personal Fork 维护与能力归属
 
-Canonical compatibility document。当前线上已部署正式制品为[v1.19.0-personal.1](https://github.com/SurgeXW0508/SillyTavern/releases/tag/v1.19.0-personal.1)，待实机切换的新一期正式制品为[v1.19.0-personal.2](https://github.com/SurgeXW0508/SillyTavern/releases/tag/v1.19.0-personal.2)；生产事实与待补项见[PRODUCTION_BASELINE.json](PRODUCTION_BASELINE.json)。涉及ST、Personal Fork、柏宝箱、柏宝库、Shalistera引入的任务，开始前必须阅读本文件，完成Capability Ownership Review；其他任务书或未来插件Fork只引用本文件，不复制冲突矩阵。
+Canonical compatibility document。当前线上已部署正式制品为[v1.19.0-personal.1](https://github.com/SurgeXW0508/SillyTavern/releases/tag/v1.19.0-personal.1)，待实机切换的新一期正式制品为[v1.19.0-personal.3](https://github.com/SurgeXW0508/SillyTavern/releases/tag/v1.19.0-personal.3)；生产事实与待补项见[PRODUCTION_BASELINE.json](PRODUCTION_BASELINE.json)。涉及ST、Personal Fork、柏宝箱、柏宝库、Shalistera引入的任务，开始前必须阅读本文件，完成Capability Ownership Review；其他任务书或未来插件Fork只引用本文件，不复制冲突矩阵。
 
 ## 接手入口与当前生产状态
 
@@ -10,7 +10,7 @@ Canonical compatibility document。当前线上已部署正式制品为[v1.19.0-
 
 正式镜像仅确认启动、Health、Vertex普通RP正文生成、刷新后聊天记录保留。Candidate的多轮、Stop、Regenerate等历史结果单独保留，不自动算作正式镜像已验证。飞牛GUI方案与仅内网/专用组网自用访问边界已确认结案，Backrest不再挂Pending，旧回滚镜像与临时目录保留边界见Operations。
 
-2026-11-12至2026-11-14阶段性仓库与发布状态：Vertex协议契约、封闭枚举诊断、多媒体共享凭据域名守卫与流式/重放收尾（Runtime `e49a6940`）、三仓库世界书性能优化与能力归属收敛（Runtime `e92f8dc4` / 柏宝箱 `3314098e` / 柏宝库 `61aae569`）、柏宝箱 `1.2.0`（内置柏宝砚）+ 柏宝库 `0.7.4` 同步与三项代码层 Pending Ownership 全量收口（阶段 Runtime `5c02da4f`、柏宝箱 `personal/stable@84345b9ac394a093bb89d8251ab197335f8f0b5b` / Runtime `1e8d5a818e19c7deafee42808aa39033c25170a1`、柏宝库 `personal/stable@0f8bd4d167713234ed2b9a56a62b4b37bcaea610` / Runtime `e9d95265c77187446177e839a2b97975ebb2aa0d`）、Shalistera Core 性能二次吸收（阶段 Runtime `28797486`），以及 Vertex `gemini-4-carbon` / `gemini-4-hydrogen` 能力表、`prefixMismatchBehavior: 'DROP'` 签名重放守卫与默认 `v1beta1` 路由（冻结 Runtime `9817c0e6de8647f6519b5cc2fc583df3070c4053`）已全部快进合入各自稳定主路、清理全部已合入临时分支，并统一发布 `v1.19.0-personal.2` 正式 GHCR 镜像与 `validated-stack.json`。线上生产在用户完成实机切换前仍记录为 `v1.19.0-personal.1`（ST Runtime `090cbba6d40e5d117ab41a9e6deb20b40e2dc336`、Tools `2f6a9c54`、BaiBaoKu `4814830f` / Runtime `b211a4e9`）。
+2026-11-12至2026-11-21阶段性仓库与发布状态：Vertex协议契约、封闭枚举诊断、多媒体共享凭据域名守卫与流式/重放收尾（Runtime `e49a6940`）、三仓库世界书性能优化与能力归属收敛（Runtime `e92f8dc4` / 柏宝箱 `3314098e` / 柏宝库 `61aae569`）、柏宝箱 `1.2.0`（内置柏宝砚）+ 柏宝库 `0.7.4` 同步与三项代码层 Pending Ownership 全量收口（阶段 Runtime `5c02da4f`、柏宝箱 `personal/stable@84345b9ac394a093bb89d8251ab197335f8f0b5b` / Runtime `1e8d5a818e19c7deafee42808aa39033c25170a1`、柏宝库 `personal/stable@0f8bd4d167713234ed2b9a56a62b4b37bcaea610` / Runtime `e9d95265c77187446177e839a2b97975ebb2aa0d`）、Shalistera Core 性能二次吸收（阶段 Runtime `28797486`）、Vertex `gemini-4-carbon` / `gemini-4-hydrogen` 能力表与 `prefixMismatchBehavior: 'DROP'` 签名重放守卫（`v1.19.0-personal.2` Runtime `9817c0e6`），以及世界书 `getWorldInfoPrompt` 私有 `allActivatedEntries` 集合与平行纯数据 `promptEntrySources` 来源透传（冻结 Runtime `6710d78edcaf5ef837992818fb3b8d5c60214ada`，两个柏宝仓库 0 改动）已全部合入稳定主路并统一发布 `v1.19.0-personal.3` 正式 GHCR 镜像与 `validated-stack.json`。线上生产在用户完成实机切换前仍记录为 `v1.19.0-personal.1`（ST Runtime `090cbba6d40e5d117ab41a9e6deb20b40e2dc336`、Tools `2f6a9c54`、BaiBaoKu `4814830f` / Runtime `b211a4e9`）。
 
 Decision Log、SH取舍索引及C-E0交接是对应阶段的历史证据。已发布Release资产中的compatibility是发布时快照，不修改其内容来补填后续实机结果；当前生产事实更新在Production Baseline。
 
@@ -84,10 +84,10 @@ Decision Log、SH取舍索引及C-E0交接是对应阶段的历史证据。已�
 
 | Component | Source / branch | 精确验证基线 |
 | --- | --- | --- |
-| Personal ST运行代码 | `SurgeXW0508/SillyTavern:release` | NAS正式生产仍为`090cbba6d40e5d117ab41a9e6deb20b40e2dc336`（`v1.19.0-personal.1`）；仓库`release`（`8781e17923ef399682c5af89a39174417fbf6e4c`）已先后快进合入三项Pending根因修复、三轮外审加固与终论保存锁修复，以及用户授权的Shalistera Core性能二次吸收（阶段Runtime `28797486d97375ddefa49f978390c88f1eb083fd`）；候选分支`stage/vertex-gemini4-models`提交Vertex `gemini-4-carbon`/`gemini-4-hydrogen`接入与参数忽略策略对齐（Runtime `dd3d522b73848dad7cba64625750c68b2ceb17d5`，暂未修改`personal-release.json`或构建新GHCR镜像） |
+| Personal ST运行代码 | `SurgeXW0508/SillyTavern:release` | NAS正式生产仍为`090cbba6d40e5d117ab41a9e6deb20b40e2dc336`（`v1.19.0-personal.1`）；仓库`release`已合入全部阶段里程碑并冻结于Runtime `6710d78edcaf5ef837992818fb3b8d5c60214ada`（含Vertex Gemini 4家族与签名`DROP`守卫、Shalistera热路径二次吸收、世界书`getWorldInfoPrompt`私有`allActivatedEntries`与`promptEntrySources`平行来源透传），统一发布为`v1.19.0-personal.3` |
 | 柏宝箱上游同步基线 | `baibai-git/ST-BaiBai-Tools:main` → `SurgeXW0508/ST-BaiBai-Tools:main` | 镜像`main`已快进同步至`d828d6812994414cef24be9e5f995a264e9fe370`（`1.2.0`） |
-| 柏宝箱唯一个人部署分支 | `SurgeXW0508/ST-BaiBai-Tools:personal/stable` | NAS当前仍为`2f6a9c54d2c906b4a0e44d20c12d0712552e393d`（跟踪`origin/personal/stable`）；仓库`personal/stable`已快进合入至`595854eeaf36fc05ecd380639d3013048693c768`（Runtime/`dist`提交`1e8d5a818e19c7deafee42808aa39033c25170a1`，完成`1.2.0`内置柏宝砚多轮外审加固、闭包绑定`fetchPipeline`外层包装安全与终论审查修复，待ST新正式镜像发布后与三库同步部署） |
-| 柏宝库唯一个人部署分支 | `SurgeXW0508/baibaoku:personal/stable` | NAS当前Git HEAD仍为`4814830f2d161dfff89e75370effa31d669586d9`（Runtime基线`b211a4e97fdaec24dc8b90c85ddc198fac9ac200` / 0.7.3，跟踪`origin/personal/stable`，原作者为`upstream`）；镜像`main`已快进同步至`d915bc8f0036fb308f02b9a9e52ae880f05d4fe4`（`0.7.4`），仓库`personal/stable`已快进合入至`2ba8864fa6b16cb425c05b6c66b4fefbfb5fd64c`（Runtime提交`e9d95265c77187446177e839a2b97975ebb2aa0d`，完成`0.7.4`同步、快速保存端到端派发/落盘保序、旧V2角色卡兼容及快表路径包含/尾行原生契约对齐，待ST新正式镜像发布后与三库同步部署） |
+| 柏宝箱唯一个人部署分支 | `SurgeXW0508/ST-BaiBai-Tools:personal/stable` | NAS当前仍为`2f6a9c54d2c906b4a0e44d20c12d0712552e393d`（跟踪`origin/personal/stable`）；仓库`personal/stable`已固定在`84345b9ac394a093bb89d8251ab197335f8f0b5b`（Runtime/`dist`提交`1e8d5a818e19c7deafee42808aa39033c25170a1`，`1.2.0`内置柏宝砚加固版，本轮0改动） |
+| 柏宝库唯一个人部署分支 | `SurgeXW0508/baibaoku:personal/stable` | NAS当前Git HEAD仍为`4814830f2d161dfff89e75370effa31d669586d9`（Runtime基线`b211a4e97fdaec24dc8b90c85ddc198fac9ac200` / 0.7.3，跟踪`origin/personal/stable`，原作者为`upstream`）；镜像`main`已快进同步至`d915bc8f0036fb308f02b9a9e52ae880f05d4fe4`（`0.7.4`），仓库`personal/stable`已固定在`0f8bd4d167713234ed2b9a56a62b4b37bcaea610`（Runtime提交`e9d95265c77187446177e839a2b97975ebb2aa0d`，`0.7.4`快速保存与列表对齐加固版，本轮0改动） |
 
 上述同时登记了NAS当前运行基线与GitHub仓库阶段合入HEAD；当前NAS实际运行组合以Production Baseline的`current_production`为准，Tools线上仍为`2f6a9c54`、BaiBaoKu线上Runtime仍为`b211a4e9`，在统一发布前不单独升级伴随插件。
 
@@ -494,3 +494,11 @@ Merged & Release Verification（`v1.19.0-personal.2`，冻结 Runtime `9817c0e6d
   4. 柏宝箱默认开启「减少加载楼层」（`chat_truncation = 10`，仅限首屏 DOM，上滑正常加载旧楼层）与预设备份总上限 `200` 份（加备注的备份永久豁免）；Save Generate 固定不装配。
   5. 柏宝库 `/v1/characters/fast-all` 按 `characters/` 目录 `mtimeMs` 判定重扫，NAS/SMB 原地覆盖同名 PNG 需增删一次文件或切换一次开关刷新；扩展管理接管默认开启，更新柏宝箱时严禁点击“强制更新”。
 - **Merged & Published Status**：经终审无阻断项，按用户授权将 `stage/vertex-gemini4-models` 快进合入 `SillyTavern:release` 并在核验 `0 ahead` 后删除候选分支，同步更新 `personal-release.json` 发布 `v1.19.0-personal.2`（配对 `ST-BaiBai-Tools:personal/stable@84345b9ac394a093bb89d8251ab197335f8f0b5b` 与 `baibaoku:personal/stable@0f8bd4d167713234ed2b9a56a62b4b37bcaea610`）；真实 Google API 对 `prefixMismatchBehavior = 'DROP'` 与 `4H Flex` 的线上实测随用户 NAS 部署验收一并确认。
+
+### 2026-11-21 世界书 `getWorldInfoPrompt` 激活集合与平行纯数据来源透传（合入 `release` 并进入 `v1.19.0-personal.3`）
+
+Capability Ownership Review & Triad Non-Overlap：
+
+- **单一 Owner 与零伴随仓库改动**：世界书干跑（`isDryRun=true`）与 `getWorldInfoPrompt` 激活条目导出由 ST Core 唯一拥有。在维持干跑抑制 `WORLDINFO_ENTRIES_LOADED` / `WORLDINFO_SCAN_DONE` / `WORLD_INFO_ACTIVATED` 全局事件与外部效果重置的前提下，`getWorldInfoPrompt` 直接随返回值并行透传本次调用私有的 `allActivatedEntries` `Set`（`7a04d3ab2dd1a46a32a0fddf42eabed65d69ae22`）及与 7 类提示词槽位同序平行的纯数据 `promptEntrySources`（`version: 1`，含 `{world, uid, content}` 等来源身份元数据，`6710d78edcaf5ef837992818fb3b8d5c60214ada`），供酒馆工具箱等外部只读消费方在干跑模式下安全读取激活世界书条目身份而无需重跑正则/宏或恢复全局事件广播。
+- **三库兼容性核验**：`public/scripts/world-info.js` 原有返回字段签名完全向后兼容，顶部 `getTokenCountAsync` 锚点未动，柏宝库 `world-info.js` 补丁锚点与柏宝箱动态导入 `/scripts/world-info.js` 导出符号零受影响；`ST-BaiBai-Tools`（`personal/stable@84345b9ac394a093bb89d8251ab197335f8f0b5b`）与 `baibaoku`（`personal/stable@0f8bd4d167713234ed2b9a56a62b4b37bcaea610`）保持 **0 改动**，Save Generate 继续固定禁用。
+- **Merged & Published Status**：按用户授权合入 `SillyTavern:release`，冻结 Runtime `6710d78edcaf5ef837992818fb3b8d5c60214ada`，更新 `personal-release.json` 发布 **`v1.19.0-personal.3`**，并在核验 `0 ahead` 后清理 `stage/worldinfo-prompt-activated-entries`；`PRODUCTION_BASELINE.json` 的 `current_production` 仍保持 `v1.19.0-personal.1` 直至用户在飞牛 NAS 完成部署验收。

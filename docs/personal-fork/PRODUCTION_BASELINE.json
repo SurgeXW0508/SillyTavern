@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "updated_at": "2026-11-14",
+  "updated_at": "2026-11-21",
   "phase_c_status": "formal_ghcr_deployed_basic_smoke_passed",
   "current_production": {
     "source": "user_provided_nas_results_2026-11-09",
@@ -63,10 +63,10 @@
     "baibaoku_alignment_scope": "remote_and_branch_metadata_only; no_runtime_dependency_database_or_container_changes"
   },
   "target_release": {
-    "tag": "v1.19.0-personal.2",
-    "runtime_commit": "9817c0e6de8647f6519b5cc2fc583df3070c4053",
+    "tag": "v1.19.0-personal.3",
+    "runtime_commit": "6710d78edcaf5ef837992818fb3b8d5c60214ada",
     "image_repository": "ghcr.io/surgexw0508/sillytavern-personal",
-    "validated_stack": "https://github.com/SurgeXW0508/SillyTavern/releases/download/v1.19.0-personal.2/validated-stack.json",
+    "validated_stack": "https://github.com/SurgeXW0508/SillyTavern/releases/download/v1.19.0-personal.3/validated-stack.json",
     "tools_validated_sha": "84345b9ac394a093bb89d8251ab197335f8f0b5b",
     "tools_runtime_commit": "1e8d5a818e19c7deafee42808aa39033c25170a1",
     "baibaoku_repository": "SurgeXW0508/baibaoku",
@@ -76,7 +76,7 @@
     "previous_production_rollback_tag": "v1.19.0-personal.1",
     "previous_production_rollback_image_ref": "ghcr.io/surgexw0508/sillytavern-personal@sha256:22973f7169fa694a0894b054e2b754ccf0ea881703d32a011e473c79c87ac740",
     "status": "release_published_awaiting_user_nas_deployment",
-    "note": "Immutable GHCR image_ref and source_commit are published in validated-stack.json on GitHub Release v1.19.0-personal.2; current_production remains at v1.19.0-personal.1 until user deploys on NAS."
+    "note": "Immutable GHCR image_ref and source_commit are published in validated-stack.json on GitHub Release v1.19.0-personal.3; current_production remains at v1.19.0-personal.1 until user deploys on NAS."
   },
   "candidate_acceptance": {
     "source": "user_report_2026-11-09",
@@ -345,15 +345,42 @@
     "nas_deployed": false,
     "real_google_or_nas_verified": false,
     "hydrogen_flex_live_api_verified": false,
-    "status": "merged_to_release_and_published_as_v1_19_0_personal_2_awaiting_user_nas_deployment",
-    "note": "Fast-forward merged into SillyTavern:release with stage/vertex-gemini4-models deleted and personal-release.json bumped to v1.19.0-personal.2; Gemini 4 Hydrogen Flex has upstream Google doc inconsistency and remains pending live Vertex API verification; NAS remains at v1.19.0-personal.1 until user deploys."
+    "status": "superseded_by_worldinfo_prompt_sources_and_personal_3_release_milestone_on_release",
+    "note": "Fast-forward merged into SillyTavern:release with stage/vertex-gemini4-models deleted and personal-release.json bumped to v1.19.0-personal.2; succeeded on SillyTavern:release by worldinfo_prompt_sources_and_personal_3_release_milestone."
+  },
+  "worldinfo_prompt_sources_and_personal_3_release_milestone": {
+    "merged_at": "2026-11-21",
+    "sillytavern_branch": "release",
+    "sillytavern_source_branch": "stage/worldinfo-prompt-activated-entries",
+    "sillytavern_base_release_commit": "c9931ca816a1a00b8eb7f1f23318a6fa78021682",
+    "sillytavern_runtime_commit": "6710d78edcaf5ef837992818fb3b8d5c60214ada",
+    "sillytavern_runtime_commits": [
+      "7a04d3ab2dd1a46a32a0fddf42eabed65d69ae22",
+      "6710d78edcaf5ef837992818fb3b8d5c60214ada"
+    ],
+    "target_release_tag": "v1.19.0-personal.3",
+    "tools_branch": "personal/stable",
+    "tools_head_commit": "84345b9ac394a093bb89d8251ab197335f8f0b5b",
+    "tools_runtime_commit": "1e8d5a818e19c7deafee42808aa39033c25170a1",
+    "baibaoku_branch": "personal/stable",
+    "baibaoku_head_commit": "0f8bd4d167713234ed2b9a56a62b4b37bcaea610",
+    "baibaoku_runtime_commit": "e9d95265c77187446177e839a2b97975ebb2aa0d",
+    "scope": "worldinfo_getWorldInfoPrompt_per_call_allActivatedEntries_and_parallel_pure_data_promptEntrySources_for_safe_dry_run_identity_consumption_and_v1_19_0_personal_3_release_publication",
+    "merged_to_release_or_personal_stable": true,
+    "candidate_branches_deleted_after_ff_merge": true,
+    "personal_release_json_updated": true,
+    "ghcr_image_built": "published_via_personal_release_workflow",
+    "nas_deployed": false,
+    "real_google_or_nas_verified": false,
+    "status": "merged_to_release_and_published_as_v1_19_0_personal_3_awaiting_user_nas_deployment",
+    "note": "Merged stage/worldinfo-prompt-activated-entries into SillyTavern:release with personal-release.json bumped to v1.19.0-personal.3; ST-BaiBai-Tools and baibaoku required zero changes; NAS remains at v1.19.0-personal.1 until user deploys."
   },
   "repository_heads": {
-    "verified_at": "2026-11-14",
+    "verified_at": "2026-11-21",
     "sillytavern_upstream_release": "06bde939fb1e9c4c8d8641d810f0a916b5bce127",
-    "sillytavern_release_runtime_commit": "9817c0e6de8647f6519b5cc2fc583df3070c4053",
-    "sillytavern_target_release_tag": "v1.19.0-personal.2",
-    "sillytavern_release_delta_from_production": "vertex_perf_ownership_baibai_1_2_0_pending_closeout_core_perf_intake_and_vertex_gemini4_models_milestones_published_as_v1_19_0_personal_2_pending_nas_update",
+    "sillytavern_release_runtime_commit": "6710d78edcaf5ef837992818fb3b8d5c60214ada",
+    "sillytavern_target_release_tag": "v1.19.0-personal.3",
+    "sillytavern_release_delta_from_production": "vertex_perf_ownership_baibai_1_2_0_pending_closeout_core_perf_intake_vertex_gemini4_models_and_worldinfo_prompt_sources_milestones_published_as_v1_19_0_personal_3_pending_nas_update",
     "tools_main": "d828d6812994414cef24be9e5f995a264e9fe370",
     "tools_personal_stable": "84345b9ac394a093bb89d8251ab197335f8f0b5b",
     "tools_personal_stable_runtime_commit": "1e8d5a818e19c7deafee42808aa39033c25170a1",
